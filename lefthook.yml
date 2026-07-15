@@ -1,0 +1,32 @@
+pre-commit:
+  piped: true
+  commands:
+    1_oxfmt:
+      glob: "**/*.{ts,tsx,js,jsx}"
+      exclude:
+        - ".claude/**"
+      run: npx oxfmt --write {staged_files}
+      stage_fixed: true
+      skip:
+        - merge
+        - rebase
+
+    2_oxlint:
+      glob: "**/*.{ts,tsx,js,jsx}"
+      exclude:
+        - ".claude/**"
+      run: npx oxlint --fix {staged_files}
+      stage_fixed: true
+      skip:
+        - merge
+        - rebase
+
+pre-push:
+  commands:
+    test:
+      run: npm run test:run -- --changed
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx commitlint --edit {1}

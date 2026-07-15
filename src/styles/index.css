@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* Sistema de diseño Comfama: tokens (theme) + estilos de la librería de componentes.
+   El theme expone las variables CSS (--color-*, --radius-*, breakpoints) que
+   consume Tailwind. Ver skill 01-cfm-design-tokens. */
+@import "@comfama/comfama-ui-react/theme.css";
+@import "@comfama/comfama-ui-react/style.css";

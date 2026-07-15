@@ -1,0 +1,10 @@
+variables:
+  AWS_BUCKET_S3: "s3://prd-$(PROJECT)/comfama-ui"
+  AWS_CDN_DISTRIBUTION: "E2JIIY2EUIOY00"
+  AWS_CDN_DISTRIBUTION_ASSETS: "E116ELFM82B6GT"
+  GATSBY_ACTIVE_ENV: "production"
+  ENVIRONMENT: "PDN"
+  SERVCONN: "AWS-PDN"
+  AWS_ARGUMENTS_S3_MASTER: "$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist/ $(AWS_BUCKET_S3) --recursive"
+  AWS_ARGUMENTS_METADATA_MASTER: '$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist/ $(AWS_BUCKET_S3) --recursive --exclude * --include *.js --no-guess-mime-type --content-type="application/javascript" --metadata-directive="REPLACE"'
+  BUILD_COMMAND_PDN: "npm run build:pdn"

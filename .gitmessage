@@ -1,0 +1,22 @@
+# <type>(<scope>): <descripción en imperativo, sin punto final, <= 100 chars>
+#
+# Cuerpo (opcional): explica el QUÉ y el PORQUÉ, no el cómo. Una línea en blanco
+# separa el header del cuerpo.
+#
+# Footer (opcional): "BREAKING CHANGE: ..." o referencias como "Refs: #123".
+#
+# ── type permitidos (Conventional Commits / commitlint) ──────────────────────
+#   feat     nueva funcionalidad
+#   fix      corrección de bug
+#   docs     solo documentación
+#   style    formato (sin cambios de lógica)
+#   refactor refactor sin cambio de comportamiento
+#   perf     mejora de rendimiento
+#   test     agregar o ajustar tests
+#   build    build system o dependencias
+#   ci       configuración de CI
+#   chore    tareas varias (sin código de producción)
+#   revert   revertir un commit previo
+#
+#   Cambio incompatible: usa "!" (ej. feat!:) o footer "BREAKING CHANGE:".
+#   Ejemplo: feat(auth): agrega login con correo corporativo

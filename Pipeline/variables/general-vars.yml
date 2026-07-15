@@ -1,0 +1,8 @@
+variables:
+  NODE_VERSION: "22.18.0"
+  PROJECT: "libreria-componentes-ui"
+  REPO_NAME: "Comfama.Baseline.Vite.Front"
+  SHARED_BRANCH_COMMAND: "s/$(REPO_NAME)/src/shared"
+  SHARED_BRANCH: "master"
+  PATH_PUBLISH_BUILD: "$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist"
+  USE_SHARED: "false"

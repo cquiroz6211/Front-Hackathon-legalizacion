@@ -1,0 +1,15 @@
+variables:
+  AWS_BUCKET_S3: "s3://qa-$(PROJECT)/comfama-ui"
+  AWS_CDN_DISTRIBUTION: "EMLZWVWRHZN6Z"
+  AWS_CDN_DISTRIBUTION_ASSETS: "E2IFQ7N3U6ANFC"
+  GATSBY_ACTIVE_ENV: "staging"
+  ENVIRONMENT: "QA"
+  SERVCONN: "AWS-QA"
+  SHARED_BRANCH: "master"
+  URL-OWASP-ZAP: "127.0.0.1:8080"
+  KEY-OWASP-ZAP: "$(OWASP_ZAP_API_KEY)"
+  URL-PROJECT: "https://d383okclwt5re2.cloudfront.net/comfama-ui"
+  approvalUser: "UserApprovalQaPdnMentoria"
+  AWS_ARGUMENTS_S3_INTEGRATION: "$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist/ $(AWS_BUCKET_S3) --recursive"
+  AWS_ARGUMENTS_METADATA_INTEGRATION: '$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist/ $(AWS_BUCKET_S3) --recursive --exclude * --include *.js --no-guess-mime-type --content-type="application/javascript" --metadata-directive="REPLACE"'
+  BUILD_COMMAND_QA: "npm run build:qa"

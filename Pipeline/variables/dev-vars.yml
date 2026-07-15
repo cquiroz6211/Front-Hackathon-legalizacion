@@ -1,0 +1,12 @@
+variables:
+  AWS_BUCKET_S3: "s3://dev-$(PROJECT)/comfama-ui"
+  AWS_CDN_DISTRIBUTION: "EQ669B3G2RLBG"
+  AWS_CDN_DISTRIBUTION_ASSETS: "EYXDVCU6BQSM0"
+  GATSBY_ACTIVE_ENV: "development"
+  ENVIRONMENT: "DEV"
+  SERVCONN: "AWS-DEV"
+  SHARED_BRANCH: "master"
+  BUILD_COMMAND: "npm run build:dev"
+  approvalUser: "UserApprovalDevQaMentoria" #to-remove
+  AWS_ARGUMENTS_S3: "$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist/ $(AWS_BUCKET_S3) --recursive"
+  AWS_ARGUMENTS_METADATA: '$(System.DefaultWorkingDirectory)/$(REPO_NAME)/dist/ $(AWS_BUCKET_S3) --recursive --exclude * --include *.js --no-guess-mime-type --content-type="application/javascript" --metadata-directive="REPLACE"'

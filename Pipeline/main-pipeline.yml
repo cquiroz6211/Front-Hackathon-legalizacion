@@ -1,0 +1,40 @@
+trigger:
+  branches:
+    include:
+      - master
+      - Integration
+      - Develop
+
+pool:
+  # name: agent-three-comfama
+  vmImage: windows-latest
+
+variables:
+  - template: variables/general-vars.yml
+  - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/heads/feature') }}:
+      - template: variables/dev-vars.yml
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Develop') }}:
+      - template: variables/dev-vars.yml
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Integration') }}:
+      - template: variables/qa-vars.yml
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/master') }}:
+      - template: variables/pdn-vars.yml
+  - name: "BROWSERSLIST_IGNORE_OLD_DATA"
+    value: true
+
+resources:
+  repositories:
+    - repository: Shared
+      type: git
+      name: Tecnologia/Comfama.Portal.Shared
+      ref: $(SHARED_BRANCH)
+
+    - repository: template
+      type: git
+      name: Tecnologia/PipelineArtifacsTemplete
+      ref: master
+
+extends:
+  template: pipeline-templates/pipelines/main.yml@template
+  parameters:
+    language: reactmulti
