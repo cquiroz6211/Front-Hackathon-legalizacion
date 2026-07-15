@@ -24,6 +24,7 @@ const FIELDS: ExtractedFields = {
   iva0Base: "0,00",
   iva0Valor: "0,00",
   totalFactura: "123.456,00",
+  propina: "0,00",
 };
 
 describe("InvoicePreview", () => {

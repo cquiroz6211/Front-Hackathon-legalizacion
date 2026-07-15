@@ -23,8 +23,8 @@ import {
 
 import {
   getDocument,
-  setDocumentCeco,
   updateDocument,
+  validatePropina,
 } from "./lib/store";
 import type { DocumentRecord, ExtractedFields } from "./types/document";
 import { InvoicePreview } from "./components/InvoicePreview";
@@ -50,6 +50,7 @@ const DEMO_FIELDS: ExtractedFields = {
   iva0Base: "0,00",
   iva0Valor: "0,00",
   totalFactura: "559.625,00",
+  propina: "0,00",
 };
 
 const FIELD_LABELS: Record<keyof ExtractedFields, string> = {
@@ -72,6 +73,7 @@ const FIELD_LABELS: Record<keyof ExtractedFields, string> = {
   iva0Base: "Base Gravada",
   iva0Valor: "IVA",
   totalFactura: "Total Factura",
+  propina: "Propina",
 };
 
 /**
@@ -123,10 +125,12 @@ const ReviewPageInner = () => {
       iva0Base: ext?.iva0Base ?? DEMO_FIELDS.iva0Base,
       iva0Valor: ext?.iva0Valor ?? DEMO_FIELDS.iva0Valor,
       totalFactura: ext?.totalFactura ?? DEMO_FIELDS.totalFactura,
+      propina: ext?.propina ?? DEMO_FIELDS.propina,
     };
   });
-  const [ceco, setCeco] = useState<string>(() =>
-    docId ? getDocument(docId)?.ceco ?? "" : "",
+  const propinaValidation = useMemo(
+    () => validatePropina(fields.propina, fields.totalFactura),
+    [fields.propina, fields.totalFactura],
   );
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -139,6 +143,7 @@ const ReviewPageInner = () => {
   };
 
   const handleConfirm = () => {
+    if (!propinaValidation.isValid) return;
     setIsProcessing(true);
     setTimeout(() => {
       if (doc) {
@@ -146,10 +151,7 @@ const ReviewPageInner = () => {
           status: "processing",
           extracted: fields,
         });
-        const finalCeco = ceco || doc.ceco || "";
-        const withCeco =
-          setDocumentCeco(doc.id, finalCeco) ?? updated ?? doc;
-        setDoc(withCeco);
+        setDoc(updated ?? doc);
         setIsConfirmed(true);
         setTimeout(() => {
           navigate(`/me?highlight=${encodeURIComponent(doc.id)}`);
@@ -350,9 +352,23 @@ const ReviewPageInner = () => {
                 className="font-mono text-sm"
               />
               <Input
-                label="Centro de costo (CECO)"
-                value={ceco}
-                onChange={(e) => setCeco(e.target.value)}
+                label={FIELD_LABELS.propina}
+                value={fields.propina}
+                onChange={(e) => updateField("propina", e.target.value)}
+                colorScheme={
+                  propinaValidation.isValid ? "default" : "error"
+                }
+                helperText={
+                  propinaValidation.message ??
+                  `Tope permitido: 10% del total factura (${new Intl.NumberFormat(
+                    "es-CO",
+                    {
+                      style: "currency",
+                      currency: "COP",
+                      maximumFractionDigits: 0,
+                    },
+                  ).format(propinaValidation.max)}).`
+                }
                 className="font-mono text-sm"
               />
             </div>
@@ -368,7 +384,9 @@ const ReviewPageInner = () => {
 
           <div className="p-6 bg-white border-t border-secondary-400 space-y-3 sticky bottom-0 relative z-10">
             <Button
-              disabled={isProcessing || isConfirmed}
+              disabled={
+                isProcessing || isConfirmed || !propinaValidation.isValid
+              }
               variant={isConfirmed ? "outlined" : "contained"}
               className="w-full"
               action={handleConfirm}

@@ -43,6 +43,12 @@ export interface ExtractedFields {
   iva0Base: string;
   iva0Valor: string;
   totalFactura: string;
+  /**
+   * Propina opcional. No se imprime en el facsimile de la factura (ese usa
+   * `totalFactura` como TOTAL). Regla de validación: `propina <= 10% del totalFactura`
+   * (incluido IVA). El cálculo y la UI de error viven en el store.
+   */
+  propina: string;
 }
 
 export type DuplicateReason = "same-legalization" | "history" | "indeterminate";
