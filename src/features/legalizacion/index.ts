@@ -24,12 +24,15 @@ export {
   listDocuments,
   listLegalizations,
   parseAmount,
+  PROPINA_MAX_RATE,
+  propinaCap,
   recomputeAllDuplicates,
   setDocumentCeco,
   setRole,
   submitLegalization,
   subscribe,
   updateDocument,
+  validatePropina,
 } from "./lib/store";
 
 export type {
@@ -41,3 +44,4 @@ export type {
   LegalizationStatus,
   Role,
 } from "./types/document";
+export type { PropinaValidation } from "./lib/store";

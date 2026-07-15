@@ -39,6 +39,7 @@ export const SEED_DOCUMENTS: Array<{
       iva0Base: "0,00",
       iva0Valor: "0,00",
       totalFactura: "559.625,00",
+      propina: "20.000,00",
     },
   },
   {
@@ -69,6 +70,7 @@ export const SEED_DOCUMENTS: Array<{
       iva0Base: "31.200,00",
       iva0Valor: "0,00",
       totalFactura: "412.000,00",
+      propina: "0,00",
     },
   },
   {

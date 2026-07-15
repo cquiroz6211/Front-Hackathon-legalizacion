@@ -251,6 +251,60 @@ export function parseAmount(raw: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Tasa máxima permitida para la propina, expresada como fracción del total
+ *  (incluye IVA). Configurable vía constante para futuro ajuste por política
+ *  de la empresa. */
+export const PROPINA_MAX_RATE = 0.1;
+
+/** Tope absoluto de propina para un totalFactura dado (incluye IVA). */
+export function propinaCap(totalFactura: string | number): number {
+  const total = typeof totalFactura === "number"
+    ? totalFactura
+    : parseAmount(totalFactura);
+  return total * PROPINA_MAX_RATE;
+}
+
+export interface PropinaValidation {
+  /** Indica si la propina cumple con la regla del 10%. */
+  isValid: boolean;
+  /** Tope máximo permitido (mismo número, ya parseado). 0 si no hay total. */
+  max: number;
+  /** Monto de la propina parseado. 0 si está vacía o es inválida. */
+  value: number;
+  /** Mensaje listo para mostrar en `helperText` o en un toast. */
+  message: string | null;
+}
+
+/**
+ * Valida la propina contra el tope del 10% del total factura (IVA incluido).
+ * Una propina vacía o "0" se considera válida (campo opcional). Cualquier valor
+ * estrictamente mayor al tope produce `isValid: false`.
+ */
+export function validatePropina(
+  propina: string | undefined,
+  totalFactura: string | number,
+): PropinaValidation {
+  const value = parseAmount(propina);
+  const max = propinaCap(totalFactura);
+  if (!propina || value === 0) {
+    return { isValid: true, max, value, message: null };
+  }
+  if (value > max) {
+    const formatter = new Intl.NumberFormat("es-CO", {
+      style: "currency",
+      currency: "COP",
+      maximumFractionDigits: 0,
+    });
+    return {
+      isValid: false,
+      max,
+      value,
+      message: `La propina no puede superar el 10% del total (${formatter.format(max)}).`,
+    };
+  }
+  return { isValid: true, max, value, message: null };
+}
+
 export function listLegalizations(): Legalization[] {
   return readLegalizations()
     .slice()

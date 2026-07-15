@@ -659,6 +659,7 @@ const Preview = ({ doc }: { doc: DocumentRecord }) => {
         <PreviewRow label="IVA 0% Base" value={e.iva0Base} mono />
         <PreviewRow label="IVA 0% Valor" value={e.iva0Valor} mono />
         <PreviewRow label="Total Factura" value={e.totalFactura} mono />
+        <PreviewRow label="Propina" value={e.propina} mono />
         {doc.ceco ? <PreviewRow label="CECO" value={doc.ceco} mono /> : null}
       </dl>
     </div>

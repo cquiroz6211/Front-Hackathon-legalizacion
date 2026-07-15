@@ -13,9 +13,12 @@ import {
   listDocuments,
   listLegalizations,
   parseAmount,
+  PROPINA_MAX_RATE,
+  propinaCap,
   recomputeAllDuplicates,
   submitLegalization,
   updateDocument,
+  validatePropina,
 } from "./store";
 import type { DocumentRecord, ExtractedFields } from "../types/document";
 
@@ -52,6 +55,7 @@ const SAMPLE_FIELDS: ExtractedFields = {
   iva0Base: "0,00",
   iva0Valor: "0,00",
   totalFactura: "100.000,00",
+  propina: "0,00",
 };
 
 function seedDoc(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
@@ -76,6 +80,39 @@ describe("parseAmount", () => {
     expect(parseAmount(undefined)).toBe(0);
     expect(parseAmount("abc")).toBe(0);
     expect(parseAmount("")).toBe(0);
+  });
+});
+
+describe("propina (validación 10% sobre total factura)", () => {
+  it("propinaCap aplica exactamente la tasa del 10%", () => {
+    expect(PROPINA_MAX_RATE).toBeCloseTo(0.1);
+    expect(propinaCap("100.000,00")).toBeCloseTo(10000);
+    expect(propinaCap(559625)).toBeCloseTo(55962.5);
+  });
+
+  it("considera válida una propina vacía o en cero", () => {
+    expect(validatePropina("", "100.000,00").isValid).toBe(true);
+    expect(validatePropina(undefined, "100.000,00").isValid).toBe(true);
+    expect(validatePropina("0,00", "100.000,00").isValid).toBe(true);
+  });
+
+  it("acepta una propina exactamente igual al tope", () => {
+    const result = validatePropina("10.000,00", "100.000,00");
+    expect(result.isValid).toBe(true);
+    expect(result.max).toBeCloseTo(10000);
+  });
+
+  it("rechaza una propina que supera el tope y devuelve el mensaje", () => {
+    const result = validatePropina("15.000,00", "100.000,00");
+    expect(result.isValid).toBe(false);
+    expect(result.value).toBeCloseTo(15000);
+    expect(result.max).toBeCloseTo(10000);
+    expect(result.message).toMatch(/10%/);
+  });
+
+  it("funciona cuando el total es numérico o string formateado", () => {
+    expect(validatePropina("5.000,00", 50000).isValid).toBe(true);
+    expect(validatePropina("6.000,00", 50000).isValid).toBe(false);
   });
 });
 
