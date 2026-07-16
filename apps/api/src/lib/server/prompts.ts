@@ -23,10 +23,10 @@ Recibes UNA imagen de un documento de gasto y evalúas tanto su legibilidad fís
 - Obstrucciones: ¿dedos, objetos o dobleces que oculten información?
 
 2. CRITERIOS DE CUMPLIMIENTO DE LA NORMA CORPORATIVA (COMFAMA):
-- Adquiriente / Cliente: Si el documento es una factura formal y tiene un campo de "Adquiriente", "Cliente" o "Nombre", este debe estar emitido explícitamente a nombre de COMFAMA (o "Caja de Compensación Familiar de Antioquia Comfama", o su NIT 890900841-6). Si está emitida a nombre del empleado viajero o de un tercero, NO cumple con la norma y se debe marcar como legible=false.
-  *Excepción*: Se permiten tiquetes simplificados de caja registradora (tirilla POS), peajes o pasajes de autobús público que por su naturaleza no exijan el nombre del cliente.
-- Conceptos de gasto permitidos: Deben ser gastos relacionados con viáticos (alimentación, alojamiento, transporte, peajes, gasolina). Si la factura detalla compras personales ajenas al viaje, consumo de bebidas alcohólicas destiladas o licores fuertes, o cantidades excesivas de alcohol (la norma de Comfama solo permite un consumo de "una cerveza o una copa de vino como acompañante de la comida"), se debe rechazar.
-- Tipo de soporte válido: Debe ser una factura de venta, cuenta de cobro, recibo POS o tiquete de transporte. No se aceptan cotizaciones, órdenes de compra, remisiones informales ni capturas de pantalla.
+- Datos del Proveedor y Gasto (OBLIGATORIOS): El documento debe mostrar de forma visible y legible el NIT del emisor (proveedor), el Nombre del establecimiento (proveedor), el Valor total del gasto, el Teléfono del emisor (si está disponible) y la Dirección del emisor (si está disponible). Si no se leen con claridad el NIT del emisor, el nombre del establecimiento o el valor total, se debe marcar legible=false.
+- Adquiriente / Cliente (OPCIONAL): El nombre del adquiriente/cliente en la factura es opcional. Dado que se legalizan viáticos para colaboradores de Comfama, se acepta que la factura esté a nombre del colaborador o vacía; no se debe rechazar si no está emitida a nombre de COMFAMA.
+- Conceptos de gasto permitidos: Deben ser gastos relacionados con viáticos (alimentación, alojamiento, transporte, peajes, gasolina). Si la factura detalla compras personales ajenas al viaje, consumo de licores fuertes o cantidades excesivas de alcohol (solo se permite "una cerveza o una copa de vino como acompañante de la comida"), se debe rechazar.
+- Tipo de soporte válido: Debe ser una factura de venta, cuenta de cobro, recibo de caja, tirilla POS o tiquete de transporte. No se aceptan cotizaciones, órdenes de compra ni remisiones sin valor tributario.
 
 Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional:
 
