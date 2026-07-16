@@ -1,6 +1,16 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LuCamera, LuCircleX, LuFileText, LuRefreshCw, LuUpload } from "react-icons/lu";
+import {
+  LuArrowLeft,
+  LuCamera,
+  LuCircleX,
+  LuFileCheck,
+  LuFileText,
+  LuFiles,
+  LuReceiptText,
+  LuRefreshCw,
+  LuUpload,
+} from "react-icons/lu";
 
 import { Alert, Button, Input, Typography, useToast } from "@comfama/comfama-ui-react";
 
@@ -9,223 +19,294 @@ import {
   addExpenseToLegalization,
   getOrCreateDraftLegalization,
   getRole,
+  updateDocument,
 } from "./lib/store";
+import type { DocumentPurpose } from "./types/document";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
-const ACCEPTED_TYPES = ".pdf,.jpg,.png";
+const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png";
+type UploadFlow = "invoice" | "collection-account";
 
-/**
- * Vista de carga de gastos (ruta `/upload`).
- * Dropzone + botón cámara; al confirmar, persiste el documento y crea un borrador
- * de legalización si no existe, navegando a `/review?doc=<id>` para validar
- * los datos extraídos.
- */
 export const UploadPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  const [file, setFile] = useState<File | null>(null);
-  const [ceco, setCeco] = useState<string>("");
-  const [isDragging, setIsDragging] = useState(false);
+  const [flow, setFlow] = useState<UploadFlow | null>(null);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [rutFile, setRutFile] = useState<File | null>(null);
+  const [accountFile, setAccountFile] = useState<File | null>(null);
+  const [ceco, setCeco] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
-    }
-  };
+  const createDocument = (file: File, purpose: DocumentPurpose, relatedDocumentId?: string) =>
+    addDocument({
+      fileName: file.name,
+      fileType: file.type || "application/octet-stream",
+      fileSize: file.size,
+      role: getRole(),
+      status: "upload",
+      purpose,
+      relatedDocumentId,
+      ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
+    });
 
   const handleContinue = () => {
-    if (!file) return;
+    if (flow === "invoice" && !invoiceFile) return;
+    if (flow === "collection-account" && (!rutFile || !accountFile)) return;
     setIsProcessing(true);
-    setTimeout(() => {
-      try {
-        const role = getRole();
-        const trimmedCeco = ceco.trim();
-        const draft = getOrCreateDraftLegalization();
-        const record = addDocument({
-          fileName: file.name,
-          fileType: file.type || "application/octet-stream",
-          fileSize: file.size,
-          role,
-          status: "upload",
-          ...(trimmedCeco ? { ceco: trimmedCeco } : {}),
-        });
-        addExpenseToLegalization(draft.id, record.id);
-        navigate(`/review?doc=${encodeURIComponent(record.id)}`);
-      } catch (err) {
-        setIsProcessing(false);
-        toast({
-          type: "error",
-          title: "No pudimos guardar el documento",
-          description: err instanceof Error ? err.message : "Inténtalo nuevamente.",
-          showIcon: true,
-          showCloseButton: true,
-        });
+
+    try {
+      const draft = getOrCreateDraftLegalization();
+      if (flow === "invoice" && invoiceFile) {
+        const invoice = createDocument(invoiceFile, "invoice");
+        addExpenseToLegalization(draft.id, invoice.id);
+        navigate(`/review?doc=${encodeURIComponent(invoice.id)}`);
+        return;
       }
-    }, 1200);
+
+      if (rutFile && accountFile) {
+        const rut = createDocument(rutFile, "rut");
+        const account = createDocument(accountFile, "collection-account", rut.id);
+        updateDocument(rut.id, { relatedDocumentId: account.id });
+        addExpenseToLegalization(draft.id, rut.id);
+        addExpenseToLegalization(draft.id, account.id);
+        navigate(`/review?doc=${encodeURIComponent(account.id)}`);
+      }
+    } catch (error) {
+      setIsProcessing(false);
+      toast({
+        type: "error",
+        title: "No pudimos guardar los documentos",
+        description: error instanceof Error ? error.message : "Inténtalo nuevamente.",
+        showIcon: true,
+        showCloseButton: true,
+      });
+    }
   };
+
+  const canContinue =
+    flow === "invoice" ? Boolean(invoiceFile) : Boolean(rutFile && accountFile);
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary-100">
       <LegalizacionHeader variant="upload" />
+      {flow === null ? (
+        <UploadSelection onSelect={setFlow} />
+      ) : (
+        <main className="flex flex-1 flex-col items-center px-6 pt-8 pb-32">
+          <div className="w-full max-w-4xl space-y-6">
+            <Button variant="ghost" action={() => setFlow(null)} className="min-h-12 px-4">
+              <LuArrowLeft className="mr-2 h-5 w-5" />
+              Volver
+            </Button>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-6 pt-8 pb-32">
-        <div className="w-full max-w-4xl space-y-8">
-          <header className="text-center space-y-2">
-            <Typography variant="h4" className="text-primary">
-              Carga de gastos
-            </Typography>
-            <Typography variant="body1" className="text-secondary-600">
-              Realizar la carga individual de facturas para iniciar el proceso de legalización.
-            </Typography>
-          </header>
+            <header className="space-y-2 text-center">
+              <Typography variant="h4" className="text-primary">
+                {flow === "invoice" ? "Cargar facturas" : "Cargar cuenta de cobro"}
+              </Typography>
+              <Typography variant="body1" className="text-secondary-600">
+                {flow === "invoice"
+                  ? "Adjunta una factura o foto para iniciar su revisión."
+                  : "Adjunta el RUT y la cuenta de cobro para continuar."}
+              </Typography>
+            </header>
 
-          <div
-            className={`h-[480px] rounded-2xl bg-white flex flex-col items-center justify-center transition-all duration-300 relative group cursor-pointer overflow-hidden border-2 border-secondary-400 hover:border-primary ${
-              isDragging ? "!border-primary !bg-primary-50" : ""
-            } ${file ? "!border-primary" : ""}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => !file && fileInputRef.current?.click()}
-          >
-            <div
-              className="absolute top-0 left-0 right-0 z-20 px-6 pt-5 pb-3 flex items-center gap-3 bg-white/80 backdrop-blur-sm border-b border-secondary-400"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <label
-                htmlFor="legalizacion-upload-ceco"
-                className="text-xs font-bold text-secondary-600 uppercase tracking-widest whitespace-nowrap"
-              >
-                Centro de costo (CECO)
-              </label>
-              <Input
-                id="legalizacion-upload-ceco"
-                value={ceco}
-                onChange={(e) => setCeco(e.target.value)}
-                placeholder="700-OP-24"
-                className="flex-1"
-              />
-            </div>
-
-            {!file ? (
-              <div
-                className="flex flex-col items-center text-center px-6 z-10"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="w-16 h-16 bg-primary-50 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110 text-primary">
-                  <LuUpload className="w-8 h-8" />
-                </div>
-                <Typography variant="h3" className="text-secondary-900">
-                  Arrastre y <span className="font-bold">Suelte</span>
-                </Typography>
-                <Typography variant="body2" className="text-secondary-600 max-w-md mt-2">
-                  Seleccione archivos de su ordenador o arrástrelos directamente a esta zona para
-                  comenzar el procesamiento.
-                </Typography>
-                <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                  <Button action={() => fileInputRef.current?.click()} className="px-6">
-                    <LuUpload className="w-4 h-4 mr-2" />
-                    Seleccionar archivo
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    action={() => cameraInputRef.current?.click()}
-                    className="px-6"
-                  >
-                    <LuCamera className="w-4 h-4 mr-2" />
-                    Tomar foto
-                  </Button>
-                </div>
+            {flow === "invoice" ? (
+              <div className="space-y-5 rounded-2xl border border-secondary-400 bg-white p-6 md:p-8">
+                <Input
+                  label="Centro de costo (CECO)"
+                  value={ceco}
+                  onChange={(event) => setCeco(event.target.value)}
+                  placeholder="700-OP-24"
+                />
+                <FileUploader
+                  label="Factura"
+                  description="PDF, JPG o PNG"
+                  file={invoiceFile}
+                  onChange={setInvoiceFile}
+                  allowCamera
+                />
               </div>
             ) : (
-              <div className="w-full max-w-md px-6 z-10" onClick={(e) => e.stopPropagation()}>
-                <div className="bg-secondary-100 border border-secondary-400 rounded-md p-3 flex items-center gap-4">
-                  <LuFileText className="w-6 h-6 text-primary" />
-                  <span className="font-mono text-sm flex-grow truncate text-secondary-900">
-                    {file.name}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    isIcon
-                    size="sm"
-                    aria-label="Quitar archivo"
-                    action={() => setFile(null)}
-                    className="text-error hover:bg-primary-50"
-                  >
-                    <LuCircleX className="w-5 h-5" />
-                  </Button>
-                </div>
+              <div className="grid gap-5 md:grid-cols-2">
+                <FileUploader
+                  label="RUT"
+                  description="Documento obligatorio en PDF, JPG o PNG"
+                  file={rutFile}
+                  onChange={setRutFile}
+                  allowCamera
+                />
+                <FileUploader
+                  label="Cuenta de cobro"
+                  description="Documento principal en PDF, JPG o PNG"
+                  file={accountFile}
+                  onChange={setAccountFile}
+                  allowCamera
+                />
               </div>
             )}
 
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept={ACCEPTED_TYPES}
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            <input
-              type="file"
-              ref={cameraInputRef}
-              accept="image/*"
-              capture="environment"
-              onChange={handleFileChange}
-              className="hidden"
+            <Alert
+              variant="outline"
+              type="info"
+              title="Formatos soportados"
+              description="PDF, JPG o PNG. Tamaño máximo sugerido: 10 MB por archivo."
+              showIcon
             />
           </div>
+        </main>
+      )}
 
-          <Alert
-            variant="outline"
-            type="info"
-            title="Formatos soportados"
-            description="PDF, JPG o PNG. Tamaño máximo sugerido: 10 MB."
-            showIcon
-          />
-        </div>
-      </main>
-
-      <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-4xl bg-white border border-secondary-400 h-20 flex items-center justify-center px-6 z-50 rounded-full shadow-lg">
-        <div className="w-full flex items-center justify-end gap-3">
+      {flow !== null && (
+        <footer className="fixed bottom-6 left-1/2 z-50 flex h-20 w-full max-w-4xl -translate-x-1/2 items-center justify-end gap-3 rounded-full border border-secondary-400 bg-white px-6 shadow-lg">
           <Button variant="outlined" className="px-8" action={() => navigate("/me")}>
-            <LuCircleX className="w-4 h-4 mr-2" />
+            <LuCircleX className="mr-2 h-4 w-4" />
             Cancelar
           </Button>
-          <Button disabled={!file || isProcessing} className="px-8" action={handleContinue}>
+          <Button
+            disabled={!canContinue || isProcessing}
+            className="px-8"
+            action={handleContinue}
+          >
             {isProcessing ? (
               <>
-                <LuRefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                <LuRefreshCw className="mr-2 h-5 w-5 animate-spin" />
                 Procesando…
               </>
             ) : (
               "Continuar"
             )}
           </Button>
-        </div>
-      </footer>
+        </footer>
+      )}
     </div>
+  );
+};
+
+interface UploadSelectionProps {
+  onSelect: (flow: UploadFlow) => void;
+}
+
+const UploadSelection = ({ onSelect }: UploadSelectionProps) => (
+  <main className="flex flex-1 items-center justify-center px-6 py-12">
+    <div className="w-full max-w-5xl space-y-10">
+      <header className="space-y-3 text-center">
+        <Typography variant="h2" className="text-secondary-900">
+          Bienvenido al portal de legalización
+        </Typography>
+        <Typography variant="body1" className="text-secondary-600">
+          Selecciona el tipo de documento que deseas cargar.
+        </Typography>
+      </header>
+      <div className="grid gap-6 md:grid-cols-2">
+        <SelectionCard
+          title="Cargar facturas"
+          description="Carga una factura o toma una foto para revisar sus datos."
+          icon={<LuReceiptText className="h-10 w-10" />}
+          action={() => onSelect("invoice")}
+        />
+        <SelectionCard
+          title="Cargar cuenta de cobro"
+          description="Adjunta el RUT y la cuenta de cobro en un mismo proceso."
+          icon={<LuFiles className="h-10 w-10" />}
+          action={() => onSelect("collection-account")}
+        />
+      </div>
+    </div>
+  </main>
+);
+
+interface SelectionCardProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  action: () => void;
+}
+
+const SelectionCard = ({ title, description, icon, action }: SelectionCardProps) => (
+  <div className="flex min-h-72 flex-col items-start justify-between rounded-2xl border border-secondary-400 bg-white p-8 shadow-sm transition-shadow hover:shadow-lg">
+    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50 text-primary">
+      {icon}
+    </div>
+    <div className="space-y-3">
+      <Typography variant="h3" className="text-secondary-900">
+        {title}
+      </Typography>
+      <Typography variant="body1" className="text-secondary-600">
+        {description}
+      </Typography>
+    </div>
+    <Button className="min-h-12 w-full" action={action}>
+      Seleccionar
+    </Button>
+  </div>
+);
+
+interface FileUploaderProps {
+  label: string;
+  description: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+  allowCamera?: boolean;
+}
+
+const FileUploader = ({ label, description, file, onChange, allowCamera }: FileUploaderProps) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(event.target.files?.[0] ?? null);
+    event.target.value = "";
+  };
+
+  return (
+    <section className="flex min-h-72 flex-col justify-between rounded-2xl border border-secondary-400 bg-white p-6">
+      <div className="space-y-2">
+        <Typography variant="h4" className="text-secondary-900">
+          {label}
+        </Typography>
+        <Typography variant="body2" className="text-secondary-600">
+          {description}
+        </Typography>
+      </div>
+
+      {file ? (
+        <div className="flex items-center gap-3 rounded-xl border border-primary bg-primary-50 p-4">
+          <LuFileCheck className="h-6 w-6 shrink-0 text-primary" />
+          <Typography variant="body2" className="min-w-0 flex-1 truncate text-secondary-900">
+            {file.name}
+          </Typography>
+          <Button
+            variant="ghost"
+            isIcon
+            aria-label={`Quitar ${label}`}
+            action={() => onChange(null)}
+          >
+            <LuCircleX className="h-5 w-5" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 py-5 text-center text-secondary-600">
+          <LuFileText className="h-10 w-10 text-primary" />
+          <Typography variant="body2">Ningún archivo seleccionado</Typography>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button variant={file ? "outlined" : "contained"} className="min-h-12 flex-1" action={() => inputRef.current?.click()}>
+          <LuUpload className="mr-2 h-4 w-4" />
+          {file ? "Reemplazar documento" : "Subir documento"}
+        </Button>
+        {allowCamera && (
+          <Button variant="outlined" className="min-h-12 flex-1" action={() => cameraRef.current?.click()}>
+            <LuCamera className="mr-2 h-4 w-4" />
+            Tomar foto
+          </Button>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} onChange={handleFile} className="hidden" aria-label={`Seleccionar ${label}`} />
+      {allowCamera && (
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" aria-label={`Tomar foto de ${label}`} />
+      )}
+    </section>
   );
 };

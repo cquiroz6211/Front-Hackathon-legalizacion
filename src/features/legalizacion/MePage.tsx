@@ -22,11 +22,12 @@ import {
   findLegalizationContainingDoc,
   getActiveLegalization,
   getBlockingDuplicates,
+  getLegalizationAnticipo,
+  getLegalizationDiferencia,
   getLegalizationTotal,
   getRole,
   listDocuments,
   listLegalizations,
-  parseAmount,
   recomputeAllDuplicates,
   submitLegalization,
   subscribe,
@@ -168,22 +169,14 @@ const MePageInner = () => {
     return () => clearTimeout(t);
   }, [highlightId, docs]);
 
-  const stats = useMemo(() => {
-    let processing = 0;
-    let gastos = 0;
-    for (const d of docs) {
-      if (d.status === "processing") {
-        processing += 1;
-        gastos += parseAmount(d.extracted?.totalFactura);
-      }
-    }
-    return { total: docs.length, processing, gastos };
-  }, [docs]);
-
   const draft = useMemo<Legalization | undefined>(() => {
     void active;
     return listLegalizations().find((l) => l.status === "draft");
   }, [active]);
+
+  const anticipo = draft ? getLegalizationAnticipo(draft.id) : 0;
+  const gastos = draft ? getLegalizationTotal(draft.id) : 0;
+  const diferencia = draft ? getLegalizationDiferencia(draft.id) : 0;
 
   const visibleDocs = useMemo(() => {
     if (!draft) return [];
@@ -319,26 +312,13 @@ const MePageInner = () => {
             <EmptyLegalizationCard />
           )}
 
-          <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatCard
-              icon={<LuFileText className="w-5 h-5 text-primary" />}
-              label="Total"
-              value={stats.total}
-              accent="primary"
+          {draft ? (
+            <FinancialSummary
+              anticipo={anticipo}
+              gastos={gastos}
+              diferencia={diferencia}
             />
-            <StatCard
-              icon={<LuCircleCheck className="w-5 h-5 text-info" />}
-              label="Procesados"
-              value={stats.processing}
-              accent="info"
-            />
-            <StatCard
-              icon={<LuWallet className="w-5 h-5 text-primary" />}
-              label="Total de la legalización"
-              value={formatCurrencyARS(stats.gastos)}
-              accent="primary"
-            />
-          </section>
+          ) : null}
 
           {submitted.length > 0 ? <SubmittedLegalizationsList items={submitted} /> : null}
 
@@ -454,7 +434,7 @@ const MePageInner = () => {
                                 <span className="font-mono text-secondary-900">{valor}</span>
                               </div>
 
-                              <div className="flex items-center gap-2 sm:justify-end flex-wrap sm:flex-nowrap">
+                              <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                                 <Chip color={STATUS_COLOR[doc.status]} hoverable={false}>
                                   {STATUS_LABEL[doc.status]}
                                 </Chip>
@@ -524,39 +504,108 @@ const MePageInner = () => {
   );
 };
 
-interface StatCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  accent: "primary" | "info";
+interface FinancialSummaryProps {
+  anticipo: number;
+  gastos: number;
+  diferencia: number;
 }
 
-const StatCard = ({ icon, label, value, accent }: StatCardProps) => {
-  const accentBg: Record<typeof accent, string> = {
-    primary: "from-primary/15",
-    info: "from-info/15",
-  };
-  const isAmount = typeof value === "string";
+/**
+ * Resumen financiero del periodo: anticipo entregado, gastos justificados con
+ * facturas y la diferencia. La diferencia es la cifra de negocio clave: dice si
+ * queda saldo a favor del anticipo (por devolver) o si hay monto a reembolsar.
+ */
+const FinancialSummary = ({ anticipo, gastos, diferencia }: FinancialSummaryProps) => {
+  const state =
+    diferencia > 0 ? "aFavor" : diferencia < 0 ? "aReembolsar" : "cuadrado";
+
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-secondary-400 bg-white p-5">
-      <div
-        className={`absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br ${accentBg[accent]} to-transparent blur-2xl pointer-events-none`}
+    <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <FinancialCard
+        icon={<LuWallet className="w-5 h-5 text-primary" />}
+        label="Anticipo"
+        value={formatCurrencyARS(anticipo)}
+        caption="Adelanto del periodo"
       />
-      <div className="relative z-10 flex items-center gap-4">
-        <div className="w-11 h-11 rounded-xl bg-primary-50 border border-secondary-400 flex items-center justify-center">
+      <FinancialCard
+        icon={<LuFileText className="w-5 h-5 text-primary" />}
+        label="Total gastos"
+        value={formatCurrencyARS(gastos)}
+        caption="Facturas justificadas"
+      />
+      <FinancialCard
+        icon={
+          state === "aReembolsar" ? (
+            <LuCircleAlert className="w-5 h-5 text-primary-foreground" />
+          ) : (
+            <LuCircleCheck className="w-5 h-5 text-primary-foreground" />
+          )
+        }
+        label="Diferencia"
+        value={formatCurrencyARS(Math.abs(diferencia))}
+        caption={
+          state === "aFavor"
+            ? "Saldo a favor · por devolver"
+            : state === "aReembolsar"
+              ? "Supera el anticipo · a reembolsar"
+              : "Anticipo y gastos cuadran"
+        }
+        highlight={state}
+      />
+    </section>
+  );
+};
+
+interface FinancialCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  caption: string;
+  highlight?: "aFavor" | "aReembolsar" | "cuadrado";
+}
+
+const FinancialCard = ({ icon, label, value, caption, highlight }: FinancialCardProps) => {
+  const isHighlight = !!highlight;
+  const highlightWrap =
+    highlight === "aReembolsar"
+      ? "bg-primary text-primary-foreground border-primary"
+      : highlight === "aFavor"
+        ? "bg-primary-50 border-primary"
+        : highlight === "cuadrado"
+          ? "bg-primary-50 border-primary"
+          : "";
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl border p-5 ${
+        isHighlight ? highlightWrap : "border-secondary-400 bg-white"
+      }`}
+    >
+      <div className="relative z-10 flex items-start gap-4">
+        <div
+          className={`w-11 h-11 rounded-xl border flex items-center justify-center flex-shrink-0 ${
+            highlight === "aReembolsar"
+              ? "bg-primary-foreground/15 border-primary-foreground/30"
+              : "bg-primary-50 border-secondary-400"
+          }`}
+        >
           {icon}
         </div>
         <div className="min-w-0">
           <Typography
             variant="body2"
-            className="text-secondary-600 uppercase tracking-widest font-bold"
+            className={`uppercase tracking-widest font-bold ${
+              highlight === "aReembolsar" ? "text-primary-foreground/80" : "text-secondary-600"
+            }`}
           >
             {label}
           </Typography>
+          <p className="mt-1 text-xl font-semibold truncate">{value}</p>
           <p
-            className={`mt-1 font-semibold text-secondary-900 ${isAmount ? "text-xl truncate" : "text-2xl"}`}
+            className={`mt-1 text-xs ${
+              highlight === "aReembolsar" ? "text-primary-foreground/70" : "text-secondary-600"
+            }`}
           >
-            {value}
+            {caption}
           </p>
         </div>
       </div>
