@@ -21,7 +21,7 @@ import {
   getRole,
   updateDocument,
 } from "./lib/store";
-import { getCecos } from "./lib/api";
+import { getCecos, validateDocument, processDocument, toExtractedFields } from "./lib/api";
 import type { DocumentPurpose } from "./types/document";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
@@ -133,32 +133,107 @@ export const UploadPage = () => {
     if (flow === "collection-account" && (!rutFile || !accountFile)) return;
     setIsProcessing(true);
 
-    try {
-      const draft = getOrCreateDraftLegalization();
-      if (flow === "invoice" && invoiceFile) {
-        const invoice = createDocument(invoiceFile, "invoice");
-        addExpenseToLegalization(draft.id, invoice.id);
-        navigate(`/review?doc=${encodeURIComponent(invoice.id)}`);
-        return;
-      }
+    const draft = getOrCreateDraftLegalization();
 
-      if (rutFile && accountFile) {
+    if (flow === "invoice" && invoiceFile) {
+      // 1. Ejecuta la validación de calidad y cumplimiento de la norma de viajes
+      validateDocument(invoiceFile)
+        .then((valRes) => {
+          if (!valRes.ok || !valRes.quality || !valRes.quality.legible) {
+            toast({
+              type: "error",
+              title: "Documento no válido para legalización",
+              description:
+                valRes.quality?.recomendacion ??
+                valRes.error ??
+                "El soporte no cumple con la norma de viajes o no es legible. Por favor, sube un documento válido.",
+              showIcon: true,
+              showCloseButton: true,
+            });
+            setIsProcessing(false);
+            return;
+          }
+
+          // 2. Si cumple, ejecuta el procesamiento con OCR + extracción estructurada con IA
+          processDocument(invoiceFile)
+            .then((procRes) => {
+              if (!procRes.ok || !procRes.fields) {
+                toast({
+                  type: "error",
+                  title: "Error al extraer datos",
+                  description:
+                    procRes.error ??
+                    "No pudimos procesar los datos del documento. Por favor, intenta de nuevo.",
+                  showIcon: true,
+                  showCloseButton: true,
+                });
+                setIsProcessing(false);
+                return;
+              }
+
+              // Mapeamos al formato del frontend
+              const mappedFields = toExtractedFields(procRes.fields);
+
+              // 3. Guardamos el documento con el estado "processing" y los datos extraídos
+              const invoice = addDocument({
+                fileName: invoiceFile.name,
+                fileType: invoiceFile.type || "application/octet-stream",
+                fileSize: invoiceFile.size,
+                role: getRole(),
+                status: "processing",
+                purpose: "invoice",
+                extracted: mappedFields,
+                ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
+              });
+
+              addExpenseToLegalization(draft.id, invoice.id);
+              setIsProcessing(false);
+              navigate(`/review?doc=${encodeURIComponent(invoice.id)}`);
+            })
+            .catch((err: unknown) => {
+              toast({
+                type: "error",
+                title: "Error de procesamiento",
+                description: err instanceof Error ? err.message : "Inténtalo nuevamente.",
+                showIcon: true,
+                showCloseButton: true,
+              });
+              setIsProcessing(false);
+            });
+        })
+        .catch((err: unknown) => {
+          toast({
+            type: "error",
+            title: "Error al validar la norma",
+            description: err instanceof Error ? err.message : "Inténtalo nuevamente.",
+            showIcon: true,
+            showCloseButton: true,
+          });
+          setIsProcessing(false);
+        });
+      return;
+    }
+
+    // Flujo para cuenta de cobro (RUT + Cuenta)
+    if (rutFile && accountFile) {
+      try {
         const rut = createDocument(rutFile, "rut");
         const account = createDocument(accountFile, "collection-account", rut.id);
         updateDocument(rut.id, { relatedDocumentId: account.id });
         addExpenseToLegalization(draft.id, rut.id);
         addExpenseToLegalization(draft.id, account.id);
+        setIsProcessing(false);
         navigate(`/review?doc=${encodeURIComponent(account.id)}`);
+      } catch (error) {
+        setIsProcessing(false);
+        toast({
+          type: "error",
+          title: "No pudimos guardar los documentos",
+          description: error instanceof Error ? error.message : "Inténtalo nuevamente.",
+          showIcon: true,
+          showCloseButton: true,
+        });
       }
-    } catch (error) {
-      setIsProcessing(false);
-      toast({
-        type: "error",
-        title: "No pudimos guardar los documentos",
-        description: error instanceof Error ? error.message : "Inténtalo nuevamente.",
-        showIcon: true,
-        showCloseButton: true,
-      });
     }
   };
 
