@@ -29,19 +29,22 @@ import type { DocumentRecord, Legalization, LegalizationStatus } from "./types/d
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 /**
- * Estados que el modelo conoce hoy (HU-0010/0011). "Aprobado" y "Rechazado" aún
- * no existen en `LegalizationStatus`; se muestran en la leyenda solo como
- * referencia futura, sin inventar datos. El estado `submitted` se reutiliza como
- * equivalente de "En revisión Gestor SAP" para no romper datos legacy.
+ * Estados que el modelo conoce hoy (HU-0010/0011). El estado `submitted` se
+ * reutiliza como equivalente de "En revisión Gestor SAP"; `approved`/`rejected`
+ * son la decisión terminal del Gestor SAP (HU-0011 lado gestor).
  */
 const STATUS_LABEL: Record<LegalizationStatus, string> = {
   draft: "Borrador",
   submitted: "En revisión Gestor SAP",
+  approved: "Aprobado",
+  rejected: "Rechazado",
 };
 
-const STATUS_COLOR: Record<LegalizationStatus, "warning" | "info"> = {
+const STATUS_COLOR: Record<LegalizationStatus, "warning" | "info" | "success" | "error"> = {
   draft: "warning",
   submitted: "info",
+  approved: "success",
+  rejected: "error",
 };
 
 /**
@@ -254,7 +257,7 @@ const HistorialPageInner = () => {
             variant="outline"
             type="info"
             title="Estados disponibles"
-            description="Hoy existen dos estados: Borrador y En revisión Gestor SAP. Los estados Aprobado y Rechazado aparecerán cuando se habilite el flujo de aprobación."
+            description="Borrador, En revisión Gestor SAP, Aprobado y Rechazado. Las legalizaciones enviadas quedan en revisión hasta que el Gestor SAP las aprueba o rechaza."
             showIcon
           />
 

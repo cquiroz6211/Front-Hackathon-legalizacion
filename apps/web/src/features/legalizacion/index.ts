@@ -8,11 +8,13 @@ export { MePage } from "./MePage";
 export { UploadPage } from "./UploadPage";
 export { ReviewPage } from "./ReviewPage";
 export { HistorialPage } from "./HistorialPage";
+export { GestorPage } from "./GestorPage";
 
 export {
   addDocument,
   addExpenseToLegalization,
   approveByLeader,
+  approveLegalization,
   businessDaysBetween,
   canSubmitToGestorSap,
   CONSUMPTION_LIMIT,
@@ -24,6 +26,7 @@ export {
   getActiveLegalization,
   getBlockingDuplicates,
   getDocument,
+  getGestorDecision,
   getLegalization,
   getLegalizationAnticipo,
   getLegalizationConsumoDate,
@@ -37,10 +40,12 @@ export {
   isLeaderApproved,
   listDocuments,
   listLegalizations,
+  listLegalizationsForGestor,
   parseAmount,
   PROPINA_MAX_RATE,
   propinaCap,
   recomputeAllDuplicates,
+  rejectLegalization,
   requiresLeaderApproval,
   setDocumentCeco,
   setRole,
@@ -57,6 +62,7 @@ export type {
   DocumentStatus,
   DuplicateReason,
   ExtractedFields,
+  GestorDecision,
   Legalization,
   LegalizationStatus,
   Role,

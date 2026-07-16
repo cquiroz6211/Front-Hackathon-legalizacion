@@ -5,7 +5,33 @@
 
 export type Role = "conductor" | "personal";
 
-export type LegalizationStatus = "draft" | "submitted";
+/**
+ * Estados del ciclo de vida de una legalización.
+ * - draft:     borrador editable por el colaborador.
+ * - submitted: enviada al Gestor SAP ("En revisión Gestor SAP").
+ * - approved:  decisión terminal del Gestor SAP ("Aprobado").
+ * - rejected:  decisión terminal del Gestor SAP ("Rechazado").
+ *
+ * HU-0011 (lado gestor): `approved`/`rejected` son el resultado de la revisión
+ * del Gestor SAP. Ambos son terminales en esta versión: una legalización
+ * rechazada NO vuelve a `draft` (se documenta el motivo y termina ahí).
+ */
+export type LegalizationStatus = "draft" | "submitted" | "approved" | "rejected";
+
+/**
+ * Decisión registrada por el Gestor SAP sobre una legalización enviada
+ * (HU-0011 lado gestor). Opcional para no romper localStorage legacy: una
+ * legalización sin este campo aún no fue decidida por el gestor.
+ */
+export interface GestorDecision {
+  decision: "approved" | "rejected";
+  /** ISO 8601 del momento de la decisión. */
+  at: string;
+  /** Identificador del gestor que decidió (de `AuthSession.identifier`). */
+  gestor: string;
+  /** Motivo obligatorio cuando la decisión es "rejected". */
+  reason?: string;
+}
 
 /**
  * Evento de auditoría del ciclo de vida de una legalización (HU-0008/0009/0011).
@@ -46,6 +72,12 @@ export interface Legalization {
     excess: boolean;
     time: boolean;
   };
+  /**
+   * Decisión del Gestor SAP (HU-0011 lado gestor). Opcional para no romper
+   * localStorage legacy: ausente mientras la legalización está pendiente
+   * (`submitted`) o es un borrador. Se setea al aprobar/rechazar.
+   */
+  gestorDecision?: GestorDecision;
   /**
    * Historial de eventos del ciclo de vida (envío a Gestor SAP, aprobación del
    * líder, etc.). Opcional para no romper localStorage legacy.

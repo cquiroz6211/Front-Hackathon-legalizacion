@@ -18,7 +18,8 @@
     "build:api": "npm --workspace apps/api run build",
     "typecheck": "npm --workspace apps/api run typecheck && npm --workspace apps/web run typecheck",
     "start:api": "npm --workspace apps/api run start",
-    "lint": "npm --workspace apps/web run lint"
+    "lint": "npm --workspace apps/web run lint",
+    "test:run": "npm --workspace apps/web run test:run"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",

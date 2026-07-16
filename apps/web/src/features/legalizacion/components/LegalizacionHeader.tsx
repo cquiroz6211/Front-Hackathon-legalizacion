@@ -3,13 +3,13 @@ import { LuArrowLeft, LuBell, LuCircleHelp, LuHistory, LuLogOut } from "react-ic
 
 import { Button, Typography } from "@comfama/comfama-ui-react";
 
-import { signOut } from "@/features/auth";
+import { authRoleLabel, getSession, signOut } from "@/features/auth";
 
 /** Path público: servido por Vite desde /public. Usamos string literal para
  *  evitar que el pipeline de Vitest tenga que transformar el asset. */
 const COMFAMA_LOGO_SRC = "/comfama-logo.svg";
 
-export type LegalizacionVariant = "me" | "upload" | "review" | "history";
+export type LegalizacionVariant = "me" | "upload" | "review" | "history" | "gestor";
 
 interface LegalizacionHeaderProps {
   variant: LegalizacionVariant;
@@ -19,9 +19,15 @@ const USER_NAME = "Juan Pérez";
 const USER_ID = "12.345.678";
 
 /**
- * Header dedicado de las 3 vistas de legalización (`/me`, `/upload`, `/review`).
- * Sustituye al shell global (`AppHeader` + `AppSidebar`) para dar identidad
- * propia al flujo, manteniendo los tokens del design system Comfama.
+ * Header dedicado de las vistas de legalización (`/me`, `/upload`, `/review`,
+ * `/history`, `/gestor`). Sustituye al shell global (`AppHeader` + `AppSidebar`)
+ * para dar identidad propia al flujo, manteniendo los tokens del design system
+ * Comfama.
+ *
+ * Variante `gestor` (HU-0011 lado gestor): muestra la identidad real del gestor
+ * desde la sesión (no el colaborador hardcoded) y oculta las acciones propias
+ * del colaborador (botón Historial y avatar hacia `/me`), porque el gestor no
+ * tiene historial propio ni perfil de colaborador en este flujo.
  */
 export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
   const navigate = useNavigate();
@@ -30,6 +36,17 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
     signOut();
     navigate("/login", { replace: true });
   };
+
+  // Variante gestor: identidad real de la sesión en lugar del colaborador demo.
+  const gestorSession = variant === "gestor" ? getSession() : null;
+  const gestorId = gestorSession?.identifier ?? "Gestor SAP";
+  const gestorRole = gestorSession ? authRoleLabel(gestorSession.role) : "Gestor SAP";
+  const gestorInitials = gestorId
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <header className="flex items-center justify-between gap-4 border-b border-secondary-400 bg-white px-6 h-16 sticky top-0 z-40">
@@ -50,6 +67,23 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
               </Typography>
               <Typography variant="body1" className="font-semibold text-secondary-900">
                 {USER_NAME} <span className="font-normal opacity-70">(ID: {USER_ID})</span>
+              </Typography>
+            </div>
+          </>
+        )}
+
+        {variant === "gestor" && (
+          <>
+            <div className="hidden md:block h-8 w-px bg-secondary-400 mx-2" />
+            <div className="hidden md:flex flex-col">
+              <Typography
+                variant="subtitle2"
+                className="text-secondary-600 uppercase tracking-wider"
+              >
+                {gestorRole}
+              </Typography>
+              <Typography variant="body1" className="font-semibold text-secondary-900">
+                {gestorId}
               </Typography>
             </div>
           </>
@@ -81,16 +115,18 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
           </Button>
         )}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Historial de gastos"
-          action={() => navigate("/history")}
-          className="inline-flex"
-        >
-          <LuHistory className="h-5 w-5 text-secondary-600" />
-          <span className="hidden sm:inline">Historial</span>
-        </Button>
+        {variant !== "gestor" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Historial de gastos"
+            action={() => navigate("/history")}
+            className="inline-flex"
+          >
+            <LuHistory className="h-5 w-5 text-secondary-600" />
+            <span className="hidden sm:inline">Historial</span>
+          </Button>
+        )}
 
         <Button
           variant="ghost"
@@ -121,17 +157,26 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
           <LuLogOut className="h-5 w-5" />
         </Button>
 
-        <Link
-          to="/me"
-          className="h-9 w-9 rounded-full border border-secondary-400 bg-secondary-100 flex items-center justify-center overflow-hidden"
-          aria-label="Mi perfil"
-        >
-          <span className="text-secondary-700 text-xs font-semibold">
-            {USER_NAME.split(" ")
-              .map((p) => p[0])
-              .join("")}
-          </span>
-        </Link>
+        {variant === "gestor" ? (
+          <div
+            className="h-9 w-9 rounded-full border border-secondary-400 bg-secondary-100 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <span className="text-secondary-700 text-xs font-semibold">{gestorInitials}</span>
+          </div>
+        ) : (
+          <Link
+            to="/me"
+            className="h-9 w-9 rounded-full border border-secondary-400 bg-secondary-100 flex items-center justify-center overflow-hidden"
+            aria-label="Mi perfil"
+          >
+            <span className="text-secondary-700 text-xs font-semibold">
+              {USER_NAME.split(" ")
+                .map((p) => p[0])
+                .join("")}
+            </span>
+          </Link>
+        )}
       </div>
     </header>
   );

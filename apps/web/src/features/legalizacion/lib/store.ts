@@ -17,6 +17,7 @@ import type {
   DocumentStatus,
   DuplicateReason,
   ExtractedFields,
+  GestorDecision,
   Legalization,
   Role,
 } from "../types/document";
@@ -915,4 +916,124 @@ export function canSubmitToGestorSap(id: string, now: Date = new Date()): Submit
   }
   const can = blockers.length === 0 && (leg?.expenseIds.length ?? 0) > 0;
   return { can, blockers };
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * HU-0011 (lado Gestor SAP) — bandeja, aprobación y rechazo.
+ *
+ * Decisiones de modelo (documentadas junto al código):
+ * - El Gestor SAP solo decide sobre legalizaciones `submitted` (pendientes).
+ *   Aprobar/rechazar sobre otro estado es no-op (devuelve undefined sin mutar).
+ * - `approved` y `rejected` son TERMINALES en esta versión: el rechazo NO
+ *   revierte a `draft`; se persiste el motivo obligatorio en `gestorDecision`.
+ * - Cada decisión queda evidenciada dos veces: en `gestorDecision` (la decisión
+ *   vigente) y en un `AuditEvent` de `auditLog` (la traza de la transición).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Legalizaciones pendientes de decisión del Gestor SAP (las `submitted`),
+ * ordenadas por fecha de envío (`submittedAt`) descendente. Usa `createdAt`
+ * como fallback cuando `submittedAt` falta. Devuelve una copia (no muta el
+ * store). Excluye `draft`, `approved` y `rejected`.
+ */
+export function listLegalizationsForGestor(): Legalization[] {
+  return readLegalizations()
+    .filter((l) => l.status === "submitted")
+    .slice()
+    .sort((a, b) => {
+      const ta = a.submittedAt
+        ? new Date(a.submittedAt).getTime()
+        : new Date(a.createdAt).getTime();
+      const tb = b.submittedAt
+        ? new Date(b.submittedAt).getTime()
+        : new Date(b.createdAt).getTime();
+      return tb - ta;
+    });
+}
+
+/**
+ * Aprueba una legalización pendiente (`submitted` → `approved`). Persiste
+ * `gestorDecision { decision: "approved", at, gestor }`, registra un
+ * `AuditEvent` (`fromStatus: "submitted"`, `toStatus: "approved"`,
+ * `reason: "gestor-approval"`, `actor: gestor`) y notifica a los listeners.
+ *
+ * No-op (devuelve `undefined` sin mutar) si el id no existe o la legalización
+ * no está `submitted`.
+ */
+export function approveLegalization(id: string, gestor: string): Legalization | undefined {
+  const all = readLegalizations();
+  const idx = all.findIndex((l) => l.id === id);
+  if (idx === -1) return undefined;
+  const current = all[idx];
+  if (current.status !== "submitted") return undefined;
+  const at = new Date().toISOString();
+  const next: Legalization = {
+    ...current,
+    status: "approved",
+    gestorDecision: { decision: "approved", at, gestor },
+    auditLog: [
+      ...(current.auditLog ?? []),
+      {
+        at,
+        fromStatus: "submitted",
+        toStatus: "approved",
+        reason: "gestor-approval",
+        actor: gestor,
+      },
+    ],
+  };
+  all[idx] = next;
+  writeLegalizations(all);
+  notify();
+  return next;
+}
+
+/**
+ * Rechaza una legalización pendiente (`submitted` → `rejected`). El `reason`
+ * es OBLIGATORIO (cadena vacía o solo espacios → no-op que devuelve
+ * `undefined` sin mutar). Persiste `gestorDecision { decision: "rejected",
+ * at, gestor, reason }` y un `AuditEvent` (`toStatus: "rejected"`,
+ * `reason: "gestor-rejection: " + reason`, `actor: gestor`). Estado terminal.
+ *
+ * No-op si el id no existe, no está `submitted` o el motivo está vacío.
+ */
+export function rejectLegalization(
+  id: string,
+  gestor: string,
+  reason: string,
+): Legalization | undefined {
+  if (!reason || reason.trim().length === 0) return undefined;
+  const all = readLegalizations();
+  const idx = all.findIndex((l) => l.id === id);
+  if (idx === -1) return undefined;
+  const current = all[idx];
+  if (current.status !== "submitted") return undefined;
+  const at = new Date().toISOString();
+  const next: Legalization = {
+    ...current,
+    status: "rejected",
+    gestorDecision: { decision: "rejected", at, gestor, reason },
+    auditLog: [
+      ...(current.auditLog ?? []),
+      {
+        at,
+        fromStatus: "submitted",
+        toStatus: "rejected",
+        reason: `gestor-rejection: ${reason}`,
+        actor: gestor,
+      },
+    ],
+  };
+  all[idx] = next;
+  writeLegalizations(all);
+  notify();
+  return next;
+}
+
+/**
+ * Decisión vigente del Gestor SAP sobre una legalización, o `undefined` si no
+ * fue decidida (o no existe). Lee el campo `gestorDecision` persistido.
+ */
+export function getGestorDecision(id: string): GestorDecision | undefined {
+  return getLegalization(id)?.gestorDecision;
 }
