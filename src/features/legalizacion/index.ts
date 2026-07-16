@@ -1,11 +1,12 @@
 /**
- * API pública de la feature `legalizacion` (HU-0006 + HU-0007).
+ * API pública de la feature `legalizacion` (HU-0006 + HU-0007 + HU-0010).
  * Solo lo exportado aquí puede ser consumido por el router u otras features.
  */
 
 export { MePage } from "./MePage";
 export { UploadPage } from "./UploadPage";
 export { ReviewPage } from "./ReviewPage";
+export { HistorialPage } from "./HistorialPage";
 
 export {
   addDocument,
@@ -13,13 +14,16 @@ export {
   currentMonthLabel,
   deleteDocument,
   duplicateKey,
+  filterLegalizationsByDateRange,
   findLegalizationContainingDoc,
   getActiveLegalization,
   getBlockingDuplicates,
   getDocument,
   getLegalization,
   getLegalizationAnticipo,
+  getLegalizationConsumoDate,
   getLegalizationDiferencia,
+  getLegalizationRegistroDate,
   getLegalizationTotal,
   getOrCreateDraftLegalization,
   getRole,
@@ -47,4 +51,4 @@ export type {
   LegalizationStatus,
   Role,
 } from "./types/document";
-export type { PropinaValidation } from "./lib/store";
+export type { PropinaValidation, DateRangeFilter, LegalizationDateFilters } from "./lib/store";
