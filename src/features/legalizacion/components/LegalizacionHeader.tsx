@@ -1,7 +1,9 @@
-import { Link } from "react-router-dom";
-import { LuArrowLeft, LuBell, LuCircleHelp } from "react-icons/lu";
+import { Link, useNavigate } from "react-router-dom";
+import { LuArrowLeft, LuBell, LuCircleHelp, LuLogOut } from "react-icons/lu";
 
 import { Button, Typography } from "@comfama/comfama-ui-react";
+
+import { signOut } from "@/features/auth";
 
 /** Path público: servido por Vite desde /public. Usamos string literal para
  *  evitar que el pipeline de Vitest tenga que transformar el asset. */
@@ -21,8 +23,16 @@ const USER_ID = "12.345.678";
  * Sustituye al shell global (`AppHeader` + `AppSidebar`) para dar identidad
  * propia al flujo, manteniendo los tokens del design system Comfama.
  */
-export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
-  <header className="flex items-center justify-between gap-4 border-b border-secondary-400 bg-white px-6 h-16 sticky top-0 z-40">
+export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
+  const navigate = useNavigate();
+
+  const handleSignOut = () => {
+    signOut();
+    navigate("/login", { replace: true });
+  };
+
+  return (
+    <header className="flex items-center justify-between gap-4 border-b border-secondary-400 bg-white px-6 h-16 sticky top-0 z-40">
     <div className="flex items-center gap-4">
       <Link to="/" aria-label="Inicio">
         <img src={COMFAMA_LOGO_SRC} alt="Comfama" width={143} height={24} />
@@ -86,6 +96,17 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         <LuCircleHelp className="h-5 w-5 text-secondary-600" />
       </Button>
 
+      <Button
+        variant="ghost"
+        isIcon
+        size="sm"
+        aria-label="Cerrar sesión"
+        action={handleSignOut}
+        className="text-secondary-600 hover:text-error"
+      >
+        <LuLogOut className="h-5 w-5" />
+      </Button>
+
       <Link
         to="/me"
         className="h-9 w-9 rounded-full border border-secondary-400 bg-secondary-100 flex items-center justify-center overflow-hidden"
@@ -99,4 +120,5 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
       </Link>
     </div>
   </header>
-);
+  );
+};
