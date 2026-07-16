@@ -34,6 +34,14 @@ const App = ({ initialPath }: { initialPath: string }) => (
         }
       />
       <Route
+        path="/gestor"
+        element={
+          <AuthGuard>
+            <span>Bandeja del gestor</span>
+          </AuthGuard>
+        }
+      />
+      <Route
         path="/me"
         element={
           <AuthGuard>
@@ -100,7 +108,7 @@ describe("AuthEntryRoute + AuthGuard (integración)", () => {
     expect(screen.getByRole("heading", { name: /iniciar sesión/i })).toBeInTheDocument();
   });
 
-  it("tras un login válido navega a /upload (replace)", async () => {
+  it("tras un login válido de colaborador navega a /upload (replace)", async () => {
     const user = userEvent.setup();
     render(
       <ToastProvider>
@@ -109,9 +117,24 @@ describe("AuthEntryRoute + AuthGuard (integración)", () => {
     );
     await user.type(screen.getByLabelText(/usuario/i, { selector: "input" }), "demo");
     await user.type(screen.getByLabelText(/contraseña/i, { selector: "input" }), "demo1234");
-    await user.click(screen.getByLabelText(/gestor sap/i));
+    await user.click(screen.getByLabelText(/colaborador/i));
     await user.click(screen.getByRole("button", { name: /ingresar/i }));
     await waitFor(() => expect(screen.getByText(/página de carga/i)).toBeInTheDocument());
+    expect(screen.queryByRole("heading", { name: /iniciar sesión/i })).not.toBeInTheDocument();
+  });
+
+  it("tras un login válido de gestor-sap navega a /gestor (replace)", async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <App initialPath="/" />
+      </ToastProvider>,
+    );
+    await user.type(screen.getByLabelText(/usuario/i, { selector: "input" }), "gestor.demo");
+    await user.type(screen.getByLabelText(/contraseña/i, { selector: "input" }), "demo1234");
+    await user.click(screen.getByLabelText(/gestor sap/i));
+    await user.click(screen.getByRole("button", { name: /ingresar/i }));
+    await waitFor(() => expect(screen.getByText(/bandeja del gestor/i)).toBeInTheDocument());
     expect(screen.queryByRole("heading", { name: /iniciar sesión/i })).not.toBeInTheDocument();
   });
 
@@ -133,11 +156,11 @@ describe("AuthEntryRoute + AuthGuard (integración)", () => {
     expect(screen.getByText(/página de carga/i)).toBeInTheDocument();
   });
 
-  it("al recargar con sesión activa, / redirige a /upload", () => {
+  it("al recargar con sesión de colaborador, / redirige a /upload", () => {
     window.localStorage.setItem(
       "comfama.auth.session.v1",
       JSON.stringify({
-        role: "gestor-sap",
+        role: "colaborador",
         identifier: "demo",
         signedInAt: new Date().toISOString(),
       }),
@@ -151,7 +174,42 @@ describe("AuthEntryRoute + AuthGuard (integración)", () => {
     expect(screen.queryByRole("heading", { name: /iniciar sesión/i })).not.toBeInTheDocument();
   });
 
-  it("al recargar con sesión activa, /login redirige a /upload", () => {
+  it("al recargar con sesión de gestor-sap, / redirige a /gestor", () => {
+    window.localStorage.setItem(
+      "comfama.auth.session.v1",
+      JSON.stringify({
+        role: "gestor-sap",
+        identifier: "demo",
+        signedInAt: new Date().toISOString(),
+      }),
+    );
+    render(
+      <ToastProvider>
+        <App initialPath="/" />
+      </ToastProvider>,
+    );
+    expect(screen.getByText(/bandeja del gestor/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /iniciar sesión/i })).not.toBeInTheDocument();
+  });
+
+  it("al recargar con sesión de colaborador, /login redirige a /upload", () => {
+    window.localStorage.setItem(
+      "comfama.auth.session.v1",
+      JSON.stringify({
+        role: "colaborador",
+        identifier: "demo",
+        signedInAt: new Date().toISOString(),
+      }),
+    );
+    render(
+      <ToastProvider>
+        <App initialPath="/login" />
+      </ToastProvider>,
+    );
+    expect(screen.getByText(/página de carga/i)).toBeInTheDocument();
+  });
+
+  it("al recargar con sesión de gestor-sap, /login redirige a /gestor", () => {
     window.localStorage.setItem(
       "comfama.auth.session.v1",
       JSON.stringify({
@@ -165,7 +223,7 @@ describe("AuthEntryRoute + AuthGuard (integración)", () => {
         <App initialPath="/login" />
       </ToastProvider>,
     );
-    expect(screen.getByText(/página de carga/i)).toBeInTheDocument();
+    expect(screen.getByText(/bandeja del gestor/i)).toBeInTheDocument();
   });
 
   it("Logout: tras limpiar el storage, la ruta protegida vuelve a pedir login", async () => {

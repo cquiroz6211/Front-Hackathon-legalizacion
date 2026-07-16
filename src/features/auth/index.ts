@@ -14,10 +14,12 @@ export { AuthEntryRoute } from "./AuthEntryRoute";
 export { LoginPage } from "./pages/LoginPage";
 export { LoginForm } from "./components/LoginForm";
 export { AuthGuard } from "./lib/AuthGuard";
+export { RoleGuard } from "./lib/RoleGuard";
 
 export {
   authRoleLabel,
   getSession,
+  homePathForRole,
   isAuthenticated,
   mapAuthRoleToLegalizationRole,
   signIn,

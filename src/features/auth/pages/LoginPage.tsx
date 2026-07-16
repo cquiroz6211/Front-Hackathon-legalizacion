@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Typography } from "@comfama/comfama-ui-react";
 
 import { LoginForm } from "../components/LoginForm";
+import { getSession, homePathForRole } from "../lib/auth";
 
 /** Path del logo oficial servido por Vite (carpeta public). */
 const COMFAMA_LOGO_SRC = "/comfama-logo.svg";
@@ -11,8 +12,9 @@ const COMFAMA_LOGO_SRC = "/comfama-logo.svg";
  * Página de inicio de sesión (rutas `/` y `/login`).
  *
  * Reemplaza la vista genérica de panel para el caso de uso del hackatón.
- * Tras un login válido, navega a `/upload` con `replace` para que la ruta
- * de login no quede en el historial.
+ * Tras un login válido, navega a la home del rol con `replace` para que la
+ * ruta de login no quede en el historial (`gestor-sap` → `/gestor`,
+ * `colaborador` → `/upload`).
  */
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -40,7 +42,9 @@ export const LoginPage = () => {
           </div>
         </header>
 
-        <LoginForm onAuthenticated={() => navigate("/upload", { replace: true })} />
+        <LoginForm
+          onAuthenticated={() => navigate(homePathForRole(getSession()?.role ?? "colaborador"), { replace: true })}
+        />
       </section>
     </main>
   );

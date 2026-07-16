@@ -116,6 +116,19 @@ export function authRoleLabel(role: AuthRole): string {
   return role === "gestor-sap" ? "Gestor SAP" : "Colaborador";
 }
 
+/**
+ * Path de aterrizaje (home) de cada rol tras autenticarse o al visitar `/`
+ * estando ya logueado (HU-0011 lado gestor):
+ * - `gestor-sap`  → `/gestor`  (bandeja de aprobación de legalizaciones).
+ * - `colaborador` → `/upload`  (carga de soportes, como hoy).
+ *
+ * Se usa tanto en `AuthEntryRoute` (recarga con sesión activa) como en
+ * `LoginPage` (post-login) para que la navegación sea coherente con el rol.
+ */
+export function homePathForRole(role: AuthRole): string {
+  return role === "gestor-sap" ? "/gestor" : "/upload";
+}
+
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
