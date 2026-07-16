@@ -1,6 +1,7 @@
 /**
- * API pública de la feature `legalizacion` (HU-0006 + HU-0007 + HU-0010).
- * Solo lo exportado aquí puede ser consumido por el router u otras features.
+ * API pública de la feature `legalizacion` (HU-0006 + HU-0007 + HU-0008 +
+ * HU-0009 + HU-0010 + HU-0011). Solo lo exportado aquí puede ser consumido por
+ * el router u otras features.
  */
 
 export { MePage } from "./MePage";
@@ -11,6 +12,10 @@ export { HistorialPage } from "./HistorialPage";
 export {
   addDocument,
   addExpenseToLegalization,
+  approveByLeader,
+  businessDaysBetween,
+  canSubmitToGestorSap,
+  CONSUMPTION_LIMIT,
   currentMonthLabel,
   deleteDocument,
   duplicateKey,
@@ -23,16 +28,20 @@ export {
   getLegalizationAnticipo,
   getLegalizationConsumoDate,
   getLegalizationDiferencia,
+  getLegalizationExcess,
   getLegalizationRegistroDate,
+  getLegalizationTimeStatus,
   getLegalizationTotal,
   getOrCreateDraftLegalization,
   getRole,
+  isLeaderApproved,
   listDocuments,
   listLegalizations,
   parseAmount,
   PROPINA_MAX_RATE,
   propinaCap,
   recomputeAllDuplicates,
+  requiresLeaderApproval,
   setDocumentCeco,
   setRole,
   submitLegalization,
@@ -42,6 +51,7 @@ export {
 } from "./lib/store";
 
 export type {
+  AuditEvent,
   DocumentRecord,
   DocumentPurpose,
   DocumentStatus,
@@ -51,4 +61,12 @@ export type {
   LegalizationStatus,
   Role,
 } from "./types/document";
-export type { PropinaValidation, DateRangeFilter, LegalizationDateFilters } from "./lib/store";
+export type {
+  DateRangeFilter,
+  LeaderApprovalRequirement,
+  LegalizationDateFilters,
+  LegalizationExcess,
+  LegalizationTimeStatus,
+  PropinaValidation,
+  SubmitToGestorSapResult,
+} from "./lib/store";

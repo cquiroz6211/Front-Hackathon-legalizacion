@@ -18,17 +18,23 @@ import {
 import { Alert, Button, Chip, Typography, useToast } from "@comfama/comfama-ui-react";
 
 import {
+  approveByLeader,
+  canSubmitToGestorSap,
+  CONSUMPTION_LIMIT,
   deleteDocument,
   findLegalizationContainingDoc,
   getActiveLegalization,
-  getBlockingDuplicates,
   getLegalizationAnticipo,
   getLegalizationDiferencia,
+  getLegalizationExcess,
+  getLegalizationTimeStatus,
   getLegalizationTotal,
   getRole,
+  isLeaderApproved,
   listDocuments,
   listLegalizations,
   recomputeAllDuplicates,
+  requiresLeaderApproval,
   submitLegalization,
   subscribe,
 } from "./lib/store";
@@ -209,8 +215,6 @@ const MePageInner = () => {
     return docs.filter((d) => inActive.has(d.id) && d.status === "processing").length;
   }, [docs, draft]);
 
-  const blockingDuplicates = useMemo(() => (draft ? getBlockingDuplicates(draft.id) : []), [draft]);
-
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -230,12 +234,13 @@ const MePageInner = () => {
 
   const handleSubmitLegalization = () => {
     if (!draft) return;
-    const blocking = getBlockingDuplicates(draft.id);
-    if (blocking.length > 0) {
+    // HU-0011: el envío al Gestor SAP valida duplicados y aprobación del líder.
+    const { can, blockers } = canSubmitToGestorSap(draft.id);
+    if (!can) {
       toast({
         type: "warning",
-        title: "Hay gastos duplicados",
-        description: "No se puede enviar la legalización mientras existan facturas duplicadas.",
+        title: "No se puede enviar todavía",
+        description: blockerMessage(blockers),
         showIcon: true,
         showCloseButton: true,
       });
@@ -245,7 +250,22 @@ const MePageInner = () => {
     if (updated && updated.status === "submitted") {
       toast({
         type: "success",
-        title: "Legalización enviada a aprobación",
+        title: "Legalización enviada",
+        description: "Quedó en revisión por el Gestor SAP.",
+        showIcon: true,
+        showCloseButton: true,
+      });
+    }
+  };
+
+  const handleApproveByLeader = () => {
+    if (!draft) return;
+    const updated = approveByLeader(draft.id);
+    if (updated?.leaderApproval) {
+      toast({
+        type: "success",
+        title: "Aprobación del líder registrada",
+        description: "Ya podés enviar la legalización al Gestor SAP.",
         showIcon: true,
         showCloseButton: true,
       });
@@ -305,8 +325,8 @@ const MePageInner = () => {
               draft={draft}
               confirmedCount={confirmedCount}
               totalInLegalization={totalInLegalization}
-              blockingDuplicates={blockingDuplicates}
               onSubmit={handleSubmitLegalization}
+              onApprove={handleApproveByLeader}
             />
           ) : (
             <EmptyLegalizationCard />
@@ -685,22 +705,40 @@ const PreviewRow = ({
   </div>
 );
 
+/** Traduce los bloqueadores de `canSubmitToGestorSap` a un mensaje legible. */
+function blockerMessage(blockers: string[]): string {
+  const parts: string[] = [];
+  if (blockers.includes("duplicates")) parts.push("hay facturas duplicadas");
+  if (blockers.includes("leader-approval:excess"))
+    parts.push("falta aprobación del líder por exceso de límite");
+  if (blockers.includes("leader-approval:time"))
+    parts.push("falta aprobación del líder por fuera de tiempo");
+  if (parts.length === 0) return "Revisá la legalización antes de enviar.";
+  const text = parts.join(" y ");
+  return `No se puede enviar: ${text}.`;
+}
+
 const ActiveLegalizationCard = ({
   draft,
   confirmedCount,
   totalInLegalization,
-  blockingDuplicates,
   onSubmit,
+  onApprove,
 }: {
   draft: Legalization;
   confirmedCount: number;
   totalInLegalization: number;
-  blockingDuplicates: string[];
   onSubmit: () => void;
+  onApprove: () => void;
 }) => {
   const total = getLegalizationTotal(draft.id);
-  const blockingCount = blockingDuplicates.length;
-  const canSubmit = confirmedCount > 0 && blockingCount === 0;
+  const excess = getLegalizationExcess(draft.id);
+  const timeStatus = getLegalizationTimeStatus(draft.id);
+  const req = requiresLeaderApproval(draft.id);
+  const approved = isLeaderApproved(draft.id);
+  const submit = canSubmitToGestorSap(draft.id);
+  const canSubmit = submit.can;
+  const hasExpenses = confirmedCount > 0;
   const caption = `${confirmedCount} gasto${confirmedCount === 1 ? "" : "s"} confirmado${confirmedCount === 1 ? "" : "s"} de ${totalInLegalization} en la legalización`;
 
   return (
@@ -730,19 +768,80 @@ const ActiveLegalizationCard = ({
           {caption}
         </Typography>
       </div>
-      {blockingCount > 0 ? (
+
+      {/* HU-0008 — exceso de límite (alerta NO bloqueante para guardar) */}
+      {excess.hasExcess ? (
         <div className="mt-4">
           <Alert
             variant="filled"
             type="warning"
-            title={`${blockingCount} gasto${blockingCount === 1 ? "" : "s"} con factura duplicada`}
-            description={`Impide${blockingCount === 1 ? "" : "n"} el envío a aprobación.`}
+            title="Exceso de límite de consumo"
+            description={`${excess.exceededDocIds.length} factura${excess.exceededDocIds.length === 1 ? "" : "s"} supera${excess.exceededDocIds.length === 1 ? "" : "n"} el tope de ${formatCurrencyARS(CONSUMPTION_LIMIT)}. Excedido: ${formatCurrencyARS(excess.totalExcess)}. Podés guardar; para enviar requiere aprobación del líder.`}
             showIcon
           />
         </div>
       ) : null}
-      <Button disabled={!canSubmit} className="mt-6 w-full" action={onSubmit}>
-        Enviar a aprobación
+
+      {/* HU-0009 — fuera de tiempo (alerta NO bloqueante para guardar) */}
+      {timeStatus.outOfTime ? (
+        <div className="mt-4">
+          <Alert
+            variant="filled"
+            type="warning"
+            title="Legalización fuera de tiempo"
+            description={`Han pasado ${timeStatus.daysElapsed} días hábiles desde el consumo (máximo ${5}). Podés guardar; para enviar requiere aprobación del líder.`}
+            showIcon
+          />
+        </div>
+      ) : null}
+
+      {/* HU-0008/0009 — aprobación del líder (simulada) cuando hay motivos */}
+      {req.any ? (
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-secondary-400 bg-secondary-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Typography
+              variant="body2"
+              className="font-bold uppercase tracking-widest text-secondary-900"
+            >
+              Aprobación del líder
+            </Typography>
+            <Typography variant="body2" className="text-secondary-600">
+              {approved
+                ? `Aprobada el ${formatDate(draft.leaderApproval?.approvedAt ?? "")}`
+                : "Pendiente de aprobación"}
+            </Typography>
+          </div>
+          {approved ? (
+            <Chip color="success" hoverable={false}>
+              <span className="inline-flex items-center gap-1">
+                <LuCircleCheck className="w-3 h-3" aria-hidden="true" />
+                Aprobada por el líder
+              </span>
+            </Chip>
+          ) : (
+            <Button variant="contained" action={onApprove} className="min-h-11">
+              <LuCircleCheck className="w-4 h-4 mr-2" />
+              Aprobar como líder
+            </Button>
+          )}
+        </div>
+      ) : null}
+
+      {/* HU-0011 — bloqueos del envío al Gestor SAP */}
+      {!canSubmit && hasExpenses ? (
+        <div className="mt-4">
+          <Alert
+            variant="outline"
+            type="info"
+            title="El envío está bloqueado"
+            description={blockerMessage(submit.blockers)}
+            showIcon
+          />
+        </div>
+      ) : null}
+
+      <Button disabled={!canSubmit} className="mt-6 w-full min-h-12" action={onSubmit}>
+        Enviar a Gestor SAP
       </Button>
     </section>
   );
@@ -755,7 +854,7 @@ const LegalizationStatusChip = ({ status }: { status: LegalizationStatus }) =>
     </Chip>
   ) : (
     <Chip color="info" hoverable={false}>
-      En aprobación
+      En revisión Gestor SAP
     </Chip>
   );
 
@@ -822,7 +921,7 @@ const SubmittedLegalizationsList = ({ items }: { items: Legalization[] }) => {
                 </p>
               </div>
               <Chip color="info" hoverable={false} className="flex-shrink-0">
-                En aprobación
+                En revisión Gestor SAP
               </Chip>
               <span className="text-sm font-mono text-secondary-900 flex-shrink-0">
                 {formatCurrencyARS(total)}

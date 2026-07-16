@@ -3,24 +3,33 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   addDocument,
   addExpenseToLegalization,
+  approveByLeader,
+  businessDaysBetween,
+  canSubmitToGestorSap,
+  CONSUMPTION_LIMIT,
   deleteDocument,
   duplicateKey,
   filterLegalizationsByDateRange,
   getActiveLegalization,
   getBlockingDuplicates,
   getDocument,
+  getLegalization,
   getLegalizationAnticipo,
   getLegalizationConsumoDate,
   getLegalizationDiferencia,
+  getLegalizationExcess,
   getLegalizationRegistroDate,
+  getLegalizationTimeStatus,
   getLegalizationTotal,
   getOrCreateDraftLegalization,
+  isLeaderApproved,
   listDocuments,
   listLegalizations,
   parseAmount,
   PROPINA_MAX_RATE,
   propinaCap,
   recomputeAllDuplicates,
+  requiresLeaderApproval,
   submitLegalization,
   updateDocument,
   validatePropina,
@@ -78,6 +87,15 @@ function seedDoc(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
 }
 
 const LEGALIZATIONS_KEY = "comfama.legalizacion.legalizations.v1";
+
+/** Fecha de hoy en `yyyy-mm-dd` (hora local) para construir docs "a tiempo". */
+function todayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 /**
  * Escribe una legalización directamente en localStorage con timestamps
@@ -283,7 +301,7 @@ describe("legalizaciones (store)", () => {
     const a = seedDoc({
       fileName: "a.pdf",
       status: "processing",
-      extracted: SAMPLE_FIELDS,
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), totalFactura: "100.000,00" },
     });
     addExpenseToLegalization(draft.id, a.id);
     const result = submitLegalization(draft.id);
@@ -302,7 +320,7 @@ describe("legalizaciones (store)", () => {
     const a = seedDoc({
       fileName: "a.pdf",
       status: "processing",
-      extracted: SAMPLE_FIELDS,
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), totalFactura: "100.000,00" },
     });
     addExpenseToLegalization(draft.id, a.id);
     submitLegalization(draft.id);
@@ -482,5 +500,322 @@ describe("HU-0010 — filterLegalizationsByDateRange", () => {
 
     const soloTo = filterLegalizationsByDateRange(items, { consumo: { to: "2024-02-28" } });
     expect(soloTo.map((l) => l.id)).toEqual(["leg-feb"]);
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * HU-0008 / HU-0009 / HU-0011 — límite de consumo, tiempo y flujo a Gestor SAP
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe("HU-0009 — businessDaysBetween (días hábiles Lun-Vie)", () => {
+  // Convención: [from, to) — incluye `from`, excluye `to`. Solo L-V.
+
+  it("mismo día (from === to) cuenta 0 días", () => {
+    expect(businessDaysBetween("2024-03-04", "2024-03-04")).toBe(0);
+  });
+
+  it("salta el fin de semana (Lun a Lun siguiente = 5 hábiles)", () => {
+    // 2024-03-04 = Lunes; 2024-03-11 = Lunes siguiente
+    expect(businessDaysBetween("2024-03-04", "2024-03-11")).toBe(5);
+  });
+
+  it("frontera: Lunes a Sábado de la misma semana = 5 hábiles (Sábado excluido)", () => {
+    // 2024-03-04 = Lunes; 2024-03-09 = Sábado
+    expect(businessDaysBetween("2024-03-04", "2024-03-09")).toBe(5);
+  });
+
+  it("Viernes a Lunes siguiente = 1 hábil (solo el Viernes)", () => {
+    // 2024-03-08 = Viernes; 2024-03-11 = Lunes
+    expect(businessDaysBetween("2024-03-08", "2024-03-11")).toBe(1);
+  });
+
+  it("cuenta un único día entre fechas consecutivas entre semana", () => {
+    // Lunes a Martes = 1 hábil (el Lunes)
+    expect(businessDaysBetween("2024-03-04", "2024-03-05")).toBe(1);
+  });
+
+  it("devuelve 0 cuando `to` es anterior a `from`", () => {
+    expect(businessDaysBetween("2024-03-11", "2024-03-04")).toBe(0);
+  });
+
+  it("devuelve 0 para fechas inválidas", () => {
+    expect(businessDaysBetween("no-es-fecha", "2024-03-04")).toBe(0);
+    expect(businessDaysBetween("2024-03-04", "no-es-fecha")).toBe(0);
+    expect(businessDaysBetween("2024-13-40", "2024-03-04")).toBe(0);
+  });
+});
+
+describe("HU-0008 — CONSUMPTION_LIMIT y getLegalizationExcess", () => {
+  it("CONSUMPTION_LIMIT es 500.000 COP", () => {
+    expect(CONSUMPTION_LIMIT).toBe(500_000);
+  });
+
+  it("sin exceso cuando ningún totalFactura supera el tope", () => {
+    const doc = seedDoc({
+      fileName: "ok.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "100.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-ok", expenseIds: [doc.id] });
+
+    const excess = getLegalizationExcess("leg-ok");
+    expect(excess.hasExcess).toBe(false);
+    expect(excess.exceededDocIds).toEqual([]);
+    expect(excess.totalExcess).toBe(0);
+  });
+
+  it("detecta exceso y acumula el monto excedido por documento", () => {
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "600.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-exceso", expenseIds: [caro.id] });
+
+    const excess = getLegalizationExcess("leg-exceso");
+    expect(excess.hasExcess).toBe(true);
+    expect(excess.exceededDocIds).toEqual([caro.id]);
+    expect(excess.totalExcess).toBeCloseTo(100_000);
+  });
+
+  it("suma el exceso de varios documentos y respeta el tope global", () => {
+    const a = seedDoc({
+      fileName: "a.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "600.000,00" },
+    });
+    const b = seedDoc({
+      fileName: "b.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "700.000,00" },
+    });
+    const ok = seedDoc({
+      fileName: "ok.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "100.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-multi", expenseIds: [a.id, b.id, ok.id] });
+
+    const excess = getLegalizationExcess("leg-multi");
+    expect(excess.hasExcess).toBe(true);
+    expect(excess.exceededDocIds.sort()).toEqual([a.id, b.id].sort());
+    expect(excess.totalExcess).toBeCloseTo(300_000); // 100k + 200k
+  });
+
+  it("legalización inexistente o sin gastos no tiene exceso", () => {
+    expect(getLegalizationExcess("no-existe").hasExcess).toBe(false);
+    seedLegalizationRaw({ id: "leg-vacia", expenseIds: [] });
+    expect(getLegalizationExcess("leg-vacia").hasExcess).toBe(false);
+  });
+});
+
+describe("HU-0009 — getLegalizationTimeStatus (días hábiles desde el consumo)", () => {
+  it("sin consumoDate no está fuera de tiempo", () => {
+    const sinFecha = seedDoc({ fileName: "sin.pdf", extracted: undefined });
+    seedLegalizationRaw({ id: "leg-sin", expenseIds: [sinFecha.id] });
+
+    const status = getLegalizationTimeStatus("leg-sin", new Date("2024-03-10T12:00:00"));
+    expect(status).toEqual({ outOfTime: false, daysElapsed: 0, consumoDate: null });
+  });
+
+  it("dentro de tiempo (<= 5 días hábiles) no marca incumplimiento", () => {
+    const doc = seedDoc({
+      fileName: "d.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-04" },
+    });
+    seedLegalizationRaw({ id: "leg-dentro", expenseIds: [doc.id] });
+
+    // Lun 2024-03-04 → Lun 2024-03-11 = 5 hábiles (límite, aún a tiempo)
+    const status = getLegalizationTimeStatus("leg-dentro", new Date("2024-03-11T12:00:00"));
+    expect(status.outOfTime).toBe(false);
+    expect(status.daysElapsed).toBe(5);
+    expect(status.consumoDate).toBe("2024-03-04");
+  });
+
+  it("fuera de tiempo (> 5 días hábiles) marca incumplimiento", () => {
+    const doc = seedDoc({
+      fileName: "d.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-04" },
+    });
+    seedLegalizationRaw({ id: "leg-fuera", expenseIds: [doc.id] });
+
+    // Lun 2024-03-04 → Mar 2024-03-12 = 6 hábiles
+    const status = getLegalizationTimeStatus("leg-fuera", new Date("2024-03-12T12:00:00"));
+    expect(status.outOfTime).toBe(true);
+    expect(status.daysElapsed).toBe(6);
+  });
+});
+
+describe("requiresLeaderApproval / isLeaderApproved / approveByLeader", () => {
+  it("requiresLeaderApproval combina exceso y tiempo", () => {
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-04", totalFactura: "600.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-ambos", expenseIds: [caro.id] });
+
+    const req = requiresLeaderApproval("leg-ambos", new Date("2024-03-12T12:00:00"));
+    expect(req.excess).toBe(true);
+    expect(req.time).toBe(true);
+    expect(req.any).toBe(true);
+  });
+
+  it("sin exceso ni fuera de tiempo no requiere aprobación del líder", () => {
+    const doc = seedDoc({
+      fileName: "ok.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), totalFactura: "100.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-ok", expenseIds: [doc.id] });
+
+    const req = requiresLeaderApproval("leg-ok");
+    expect(req.any).toBe(false);
+  });
+
+  it("isLeaderApproved es false mientras falte la aprobación requerida", () => {
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "600.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-pend", expenseIds: [caro.id] });
+
+    expect(isLeaderApproved("leg-pend")).toBe(false);
+  });
+
+  it("approveByLeader deja evidencia (leaderApproval + audit) y desbloquea", () => {
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-04", totalFactura: "600.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-aprobar", expenseIds: [caro.id] });
+
+    const before = requiresLeaderApproval("leg-aprobar", new Date("2024-03-12T12:00:00"));
+    expect(before.any).toBe(true);
+
+    const approved = approveByLeader("leg-aprobar");
+    expect(approved?.leaderApproval).toBeDefined();
+    expect(approved?.leaderApproval?.excess).toBe(true);
+    expect(approved?.leaderApproval?.time).toBe(true);
+    expect(approved?.leaderApproval?.approvedAt).toBeDefined();
+
+    // Auditoría: un evento con actor líder y motivo que menciona exceso y tiempo
+    const audit = approved?.auditLog ?? [];
+    expect(audit.length).toBe(1);
+    expect(audit[0].actor).toBe("leader");
+    expect(audit[0].reason).toMatch(/leader-approval/);
+    expect(audit[0].reason).toMatch(/excess/);
+    expect(audit[0].reason).toMatch(/time/);
+
+    // Ya cubierto → desbloqueado
+    expect(isLeaderApproved("leg-aprobar")).toBe(true);
+  });
+
+  it("approveByLeader de una legalización inexistente devuelve undefined", () => {
+    expect(approveByLeader("no-existe")).toBeUndefined();
+  });
+});
+
+describe("HU-0011 — canSubmitToGestorSap (bloqueos combinados)", () => {
+  function doc(over = false, fecha = todayISO()) {
+    return seedDoc({
+      fileName: "d.pdf",
+      extracted: {
+        ...SAMPLE_FIELDS,
+        fecha,
+        totalFactura: over ? "600.000,00" : "100.000,00",
+      },
+    });
+  }
+
+  it("sin gastos no puede enviar (can false)", () => {
+    seedLegalizationRaw({ id: "leg-vacia", expenseIds: [] });
+    const res = canSubmitToGestorSap("leg-vacia");
+    expect(res.can).toBe(false);
+  });
+
+  it("bloquea por exceso pendiente de aprobación del líder", () => {
+    const d = doc(true);
+    seedLegalizationRaw({ id: "leg-exceso", expenseIds: [d.id] });
+    const res = canSubmitToGestorSap("leg-exceso");
+    expect(res.can).toBe(false);
+    expect(res.blockers).toContain("leader-approval:excess");
+  });
+
+  it("bloquea por tiempo pendiente de aprobación del líder", () => {
+    const d = doc(false, "2024-03-04");
+    seedLegalizationRaw({ id: "leg-tiempo", expenseIds: [d.id] });
+    const res = canSubmitToGestorSap("leg-tiempo", new Date("2024-03-12T12:00:00"));
+    expect(res.can).toBe(false);
+    expect(res.blockers).toContain("leader-approval:time");
+  });
+
+  it("bloquea por duplicados", () => {
+    const a = seedDoc({
+      fileName: "a.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), nroFactura: "F-001" },
+    });
+    const b = seedDoc({
+      fileName: "b.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), nroFactura: "F-001" },
+    });
+    seedLegalizationRaw({ id: "leg-dup", expenseIds: [a.id, b.id] });
+    recomputeAllDuplicates();
+    const res = canSubmitToGestorSap("leg-dup");
+    expect(res.can).toBe(false);
+    expect(res.blockers).toContain("duplicates");
+  });
+
+  it("aprueba al líder y habilita el envío (sin otros bloqueos)", () => {
+    const d = doc(true, "2024-03-04");
+    seedLegalizationRaw({ id: "leg-ok", expenseIds: [d.id] });
+    approveByLeader("leg-ok");
+    const res = canSubmitToGestorSap("leg-ok", new Date("2024-03-12T12:00:00"));
+    expect(res.can).toBe(true);
+    expect(res.blockers).toEqual([]);
+  });
+});
+
+describe("HU-0011 — submitLegalization respeta aprobación del líder y audita", () => {
+  it("bloquea el envío si falta aprobación del líder por exceso", () => {
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "600.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-pend", expenseIds: [caro.id] });
+
+    const result = submitLegalization("leg-pend");
+    expect(result).toBeUndefined();
+    expect(getLegalization("leg-pend")?.status).toBe("draft");
+  });
+
+  it("permite el envío tras la aprobación del líder y registra auditoría", () => {
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "600.000,00" },
+    });
+    seedLegalizationRaw({ id: "leg-apr", expenseIds: [caro.id] });
+    approveByLeader("leg-apr");
+
+    const result = submitLegalization("leg-apr");
+    expect(result?.status).toBe("submitted");
+    expect(result?.submittedAt).toBeDefined();
+
+    // Auditoría del envío: draft → submitted con motivo de Gestor SAP
+    const submitEvent = result?.auditLog?.find((e) => e.toStatus === "submitted");
+    expect(submitEvent).toBeDefined();
+    expect(submitEvent?.fromStatus).toBe("draft");
+    expect(submitEvent?.reason).toMatch(/gestor-sap/i);
+    // Conserva el evento previo de aprobación del líder
+    expect(result?.auditLog?.some((e) => e.actor === "leader")).toBe(true);
+  });
+
+  it("mantiene el bloqueo por duplicados existente", () => {
+    const a = seedDoc({
+      fileName: "a.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), nroFactura: "F-001" },
+    });
+    const b = seedDoc({
+      fileName: "b.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: todayISO(), nroFactura: "F-001" },
+    });
+    seedLegalizationRaw({ id: "leg-dup", expenseIds: [a.id, b.id] });
+    recomputeAllDuplicates();
+
+    expect(submitLegalization("leg-dup")).toBeUndefined();
+    expect(getLegalization("leg-dup")?.status).toBe("draft");
   });
 });
