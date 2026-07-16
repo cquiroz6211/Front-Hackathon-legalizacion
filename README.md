@@ -12,21 +12,21 @@ estándar y opinada para arrancar nuevos proyectos con:
 
 ## Stack
 
-| Área            | Herramienta                                      |
-| --------------- | ------------------------------------------------ |
-| UI              | React 19, `@comfama/comfama-ui-react`            |
-| Lenguaje        | TypeScript                                       |
-| Bundler / dev   | Vite 8                                            |
-| Estilos         | Tailwind CSS v4 + tokens del theme de la libui   |
-| Lint / formato  | Oxlint, Oxfmt                                     |
-| Pruebas         | Vitest + Testing Library (jsdom)                  |
-| Git hooks       | Lefthook (+ Commitlint)                           |
-| CI/CD           | Azure DevOps (`Pipeline/`)                        |
+| Área           | Herramienta                                    |
+| -------------- | ---------------------------------------------- |
+| UI             | React 19, `@comfama/comfama-ui-react`          |
+| Lenguaje       | TypeScript                                     |
+| Bundler / dev  | Vite 8                                         |
+| Estilos        | Tailwind CSS v4 + tokens del theme de la libui |
+| Lint / formato | Oxlint, Oxfmt                                  |
+| Pruebas        | Vitest + Testing Library (jsdom)               |
+| Git hooks      | Lefthook (+ Commitlint)                        |
+| CI/CD          | Azure DevOps (`Pipeline/`)                     |
 
 ## Arquitectura (Screaming Architecture)
 
 La organización por **dominio de negocio**, no por tipo técnico. Al abrir `src/`
-se debe entender *qué hace la aplicación*, no con qué framework está hecha.
+se debe entender _qué hace la aplicación_, no con qué framework está hecha.
 
 ```
 src/
@@ -96,40 +96,42 @@ La configuración autenticada de npm para el paquete privado `@comfama` es local
 Los archivos `.env` viven en la carpeta `env/` (configurado vía `envDir` en
 `vite.config.ts`). Solo las variables con prefijo `VITE_` se exponen al cliente.
 
-| Archivo                 | Uso                                          | Versionado |
-| ----------------------- | -------------------------------------------- | ---------- |
-| `env/.env.local`        | Trabajo local (`npm run dev`)                | ❌ no       |
-| `env/.env.local.example`| Plantilla de `.env.local`                    | ✅ sí       |
-| `env/.env.dev`          | Ambiente DEV (`npm run build:dev`)           | ❌ no       |
-| `env/.env.qa`           | Ambiente QA (`npm run build:qa`)             | ❌ no       |
-| `env/.env.pdn`          | Ambiente PDN/producción (`npm run build:pdn`)| ❌ no       |
+| Archivo                  | Uso                                           | Versionado |
+| ------------------------ | --------------------------------------------- | ---------- |
+| `env/.env.local`         | Trabajo local (`npm run dev`)                 | ❌ no      |
+| `env/.env.local.example` | Plantilla de `.env.local`                     | ✅ sí      |
+| `env/.env.dev`           | Ambiente DEV (`npm run build:dev`)            | ❌ no      |
+| `env/.env.qa`            | Ambiente QA (`npm run build:qa`)              | ❌ no      |
+| `env/.env.pdn`           | Ambiente PDN/producción (`npm run build:pdn`) | ❌ no      |
 
 Los archivos de ambiente por entorno se crean localmente o se inyectan desde CI/CD. Solo deben contener configuración pública; los secretos deben gestionarse fuera del repositorio.
 
 Acceso en código vía `src/config/env.ts` (valida al arranque):
 
 ```ts
-import { env } from '@/config/env'
+import { env } from "@/config/env";
 
-fetch(`${env.apiUrl}/usuarios`)
-if (env.isProduction) { /* ... */ }
+fetch(`${env.apiUrl}/usuarios`);
+if (env.isProduction) {
+  /* ... */
+}
 ```
 
 ## Scripts
 
-| Script                | Descripción                                            |
-| --------------------- | ------------------------------------------------------ |
-| `dev`                 | Servidor de desarrollo                                 |
-| `build`               | Build de producción (modo por defecto)                 |
-| `build:dev` / `:qa` / `:pdn` | Build por ambiente (carga `env/.env.<modo>`)    |
-| `preview`             | Sirve el build localmente                              |
-| `lint` / `lint:fix`   | Oxlint (con `--fix`)                                   |
-| `format` / `format:check` | Oxfmt                                              |
-| `typecheck`           | Type-check con `tsc -b --noEmit`                       |
-| `test` / `test:run`   | Vitest (watch / una pasada)                            |
-| `test:coverage`       | Tests con cobertura                                    |
-| `test:junit`          | Reporte JUnit (`coverage/junit.xml`) para el pipeline  |
-| `test:lcov` / `test:sonar` | Cobertura lcov para SonarQube                     |
+| Script                       | Descripción                                           |
+| ---------------------------- | ----------------------------------------------------- |
+| `dev`                        | Servidor de desarrollo                                |
+| `build`                      | Build de producción (modo por defecto)                |
+| `build:dev` / `:qa` / `:pdn` | Build por ambiente (carga `env/.env.<modo>`)          |
+| `preview`                    | Sirve el build localmente                             |
+| `lint` / `lint:fix`          | Oxlint (con `--fix`)                                  |
+| `format` / `format:check`    | Oxfmt                                                 |
+| `typecheck`                  | Type-check con `tsc -b --noEmit`                      |
+| `test` / `test:run`          | Vitest (watch / una pasada)                           |
+| `test:coverage`              | Tests con cobertura                                   |
+| `test:junit`                 | Reporte JUnit (`coverage/junit.xml`) para el pipeline |
+| `test:lcov` / `test:sonar`   | Cobertura lcov para SonarQube                         |
 
 ## Pruebas
 

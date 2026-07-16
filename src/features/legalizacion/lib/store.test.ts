@@ -147,9 +147,7 @@ describe("legalizaciones (store)", () => {
     const doc = seedDoc({});
     addExpenseToLegalization(draft.id, doc.id);
     addExpenseToLegalization(draft.id, doc.id);
-    expect(
-      listLegalizations().find((l) => l.id === draft.id)?.expenseIds,
-    ).toEqual([doc.id]);
+    expect(listLegalizations().find((l) => l.id === draft.id)?.expenseIds).toEqual([doc.id]);
   });
 
   it("getLegalizationTotal suma totalFactura parseado de cada gasto", () => {
@@ -180,9 +178,7 @@ describe("legalizaciones (store)", () => {
   it("submitLegalization no persiste si el borrador está vacío", () => {
     const draft = getOrCreateDraftLegalization();
     expect(submitLegalization(draft.id)).toBeUndefined();
-    expect(
-      listLegalizations().find((l) => l.id === draft.id)?.status,
-    ).toBe("draft");
+    expect(listLegalizations().find((l) => l.id === draft.id)?.status).toBe("draft");
   });
 
   it("getActiveLegalization devuelve la última enviada cuando no hay borrador", () => {

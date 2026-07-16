@@ -1,9 +1,5 @@
 import { Link } from "react-router-dom";
-import {
-  LuArrowLeft,
-  LuBell,
-  LuCircleHelp,
-} from "react-icons/lu";
+import { LuArrowLeft, LuBell, LuCircleHelp } from "react-icons/lu";
 
 import { Button, Typography } from "@comfama/comfama-ui-react";
 
@@ -36,10 +32,7 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         <>
           <div className="hidden md:block h-8 w-px bg-secondary-400 mx-2" />
           <div className="hidden md:flex flex-col">
-            <Typography
-              variant="subtitle2"
-              className="text-secondary-600 uppercase tracking-wider"
-            >
+            <Typography variant="subtitle2" className="text-secondary-600 uppercase tracking-wider">
               Operador
             </Typography>
             <Typography variant="body1" className="font-semibold text-secondary-900">
@@ -56,10 +49,7 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
           <Typography variant="subtitle2" className="font-semibold text-secondary-900">
             {USER_NAME}
           </Typography>
-          <Typography
-            variant="body2"
-            className="text-secondary-600 uppercase tracking-wider"
-          >
+          <Typography variant="body2" className="text-secondary-600 uppercase tracking-wider">
             ID: {USER_ID}
           </Typography>
         </div>
@@ -92,13 +82,7 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         )}
       </Button>
 
-      <Button
-        variant="ghost"
-        isIcon
-        size="sm"
-        aria-label="Ayuda"
-        action={() => undefined}
-      >
+      <Button variant="ghost" isIcon size="sm" aria-label="Ayuda" action={() => undefined}>
         <LuCircleHelp className="h-5 w-5 text-secondary-600" />
       </Button>
 
@@ -108,7 +92,9 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         aria-label="Mi perfil"
       >
         <span className="text-secondary-700 text-xs font-semibold">
-          {USER_NAME.split(" ").map((p) => p[0]).join("")}
+          {USER_NAME.split(" ")
+            .map((p) => p[0])
+            .join("")}
         </span>
       </Link>
     </div>

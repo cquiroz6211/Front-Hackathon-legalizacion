@@ -1,20 +1,8 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  LuCamera,
-  LuCircleX,
-  LuFileText,
-  LuRefreshCw,
-  LuUpload,
-} from "react-icons/lu";
+import { LuCamera, LuCircleX, LuFileText, LuRefreshCw, LuUpload } from "react-icons/lu";
 
-import {
-  Alert,
-  Button,
-  Input,
-  Typography,
-  useToast,
-} from "@comfama/comfama-ui-react";
+import { Alert, Button, Input, Typography, useToast } from "@comfama/comfama-ui-react";
 
 import {
   addDocument,
@@ -91,8 +79,7 @@ export const UploadPage = () => {
         toast({
           type: "error",
           title: "No pudimos guardar el documento",
-          description:
-            err instanceof Error ? err.message : "Inténtalo nuevamente.",
+          description: err instanceof Error ? err.message : "Inténtalo nuevamente.",
           showIcon: true,
           showCloseButton: true,
         });
@@ -111,8 +98,7 @@ export const UploadPage = () => {
               Carga de gastos
             </Typography>
             <Typography variant="body1" className="text-secondary-600">
-              Realizar la carga individual de facturas para iniciar el proceso
-              de legalización.
+              Realizar la carga individual de facturas para iniciar el proceso de legalización.
             </Typography>
           </header>
 
@@ -155,18 +141,12 @@ export const UploadPage = () => {
                 <Typography variant="h3" className="text-secondary-900">
                   Arrastre y <span className="font-bold">Suelte</span>
                 </Typography>
-                <Typography
-                  variant="body2"
-                  className="text-secondary-600 max-w-md mt-2"
-                >
-                  Seleccione archivos de su ordenador o arrástrelos directamente
-                  a esta zona para comenzar el procesamiento.
+                <Typography variant="body2" className="text-secondary-600 max-w-md mt-2">
+                  Seleccione archivos de su ordenador o arrástrelos directamente a esta zona para
+                  comenzar el procesamiento.
                 </Typography>
                 <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                  <Button
-                    action={() => fileInputRef.current?.click()}
-                    className="px-6"
-                  >
+                  <Button action={() => fileInputRef.current?.click()} className="px-6">
                     <LuUpload className="w-4 h-4 mr-2" />
                     Seleccionar archivo
                   </Button>
@@ -181,10 +161,7 @@ export const UploadPage = () => {
                 </div>
               </div>
             ) : (
-              <div
-                className="w-full max-w-md px-6 z-10"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="w-full max-w-md px-6 z-10" onClick={(e) => e.stopPropagation()}>
                 <div className="bg-secondary-100 border border-secondary-400 rounded-md p-3 flex items-center gap-4">
                   <LuFileText className="w-6 h-6 text-primary" />
                   <span className="font-mono text-sm flex-grow truncate text-secondary-900">
@@ -233,19 +210,11 @@ export const UploadPage = () => {
 
       <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-4xl bg-white border border-secondary-400 h-20 flex items-center justify-center px-6 z-50 rounded-full shadow-lg">
         <div className="w-full flex items-center justify-end gap-3">
-          <Button
-            variant="outlined"
-            className="px-8"
-            action={() => navigate("/me")}
-          >
+          <Button variant="outlined" className="px-8" action={() => navigate("/me")}>
             <LuCircleX className="w-4 h-4 mr-2" />
             Cancelar
           </Button>
-          <Button
-            disabled={!file || isProcessing}
-            className="px-8"
-            action={handleContinue}
-          >
+          <Button disabled={!file || isProcessing} className="px-8" action={handleContinue}>
             {isProcessing ? (
               <>
                 <LuRefreshCw className="w-5 h-5 mr-2 animate-spin" />

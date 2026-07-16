@@ -114,19 +114,19 @@ Reglas que aplica commitlint:
 
 ### Tipos permitidos (`type-enum`)
 
-| type       | Uso                                                  |
-| ---------- | ---------------------------------------------------- |
-| `feat`     | Nueva funcionalidad                                  |
-| `fix`      | Corrección de bug                                    |
-| `docs`     | Solo documentación                                   |
-| `style`    | Formato (sin cambios de lógica)                      |
-| `refactor` | Refactor sin cambio de comportamiento                |
-| `perf`     | Mejora de rendimiento                                |
-| `test`     | Agregar o ajustar tests                              |
-| `build`    | Build system o dependencias                          |
-| `ci`       | Configuración de CI                                  |
-| `chore`    | Tareas varias (sin código de producción)             |
-| `revert`   | Revertir un commit previo                            |
+| type       | Uso                                      |
+| ---------- | ---------------------------------------- |
+| `feat`     | Nueva funcionalidad                      |
+| `fix`      | Corrección de bug                        |
+| `docs`     | Solo documentación                       |
+| `style`    | Formato (sin cambios de lógica)          |
+| `refactor` | Refactor sin cambio de comportamiento    |
+| `perf`     | Mejora de rendimiento                    |
+| `test`     | Agregar o ajustar tests                  |
+| `build`    | Build system o dependencias              |
+| `ci`       | Configuración de CI                      |
+| `chore`    | Tareas varias (sin código de producción) |
+| `revert`   | Revertir un commit previo                |
 
 > Fuente de verdad: `commitlint.config.js`. Si cambian los tipos ahí, actualizar esta tabla.
 
