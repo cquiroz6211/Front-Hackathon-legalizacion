@@ -18,6 +18,8 @@ export {
   getBlockingDuplicates,
   getDocument,
   getLegalization,
+  getLegalizationAnticipo,
+  getLegalizationDiferencia,
   getLegalizationTotal,
   getOrCreateDraftLegalization,
   getRole,
@@ -37,6 +39,7 @@ export {
 
 export type {
   DocumentRecord,
+  DocumentPurpose,
   DocumentStatus,
   DuplicateReason,
   ExtractedFields,

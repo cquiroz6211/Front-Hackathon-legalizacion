@@ -13,6 +13,7 @@
 import { SEED_DOCUMENTS } from "../data/seed";
 import type {
   DocumentRecord,
+  DocumentPurpose,
   DocumentStatus,
   DuplicateReason,
   ExtractedFields,
@@ -23,6 +24,14 @@ import type {
 const DOCUMENTS_KEY = "comfama.legalizacion.documents.v1";
 const LEGALIZATIONS_KEY = "comfama.legalizacion.legalizations.v1";
 const ROLE_KEY = "comfama.legalizacion.role.v1";
+
+/**
+ * Anticipo demo sembrado por defecto al crear una legalización nueva.
+ * En producción vendría del backend (definido por RRHH/finanzas por periodo).
+ * Valor representativo para que la diferencia frente a los gastos de seed sea
+ * visible en el demo.
+ */
+const DEFAULT_ANTICIPO = 1_500_000;
 
 const SPANISH_MONTHS = [
   "Enero",
@@ -87,7 +96,13 @@ function readLegalizations(): Legalization[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as Legalization[];
+    if (Array.isArray(parsed)) {
+      return (parsed as Legalization[]).map((l) =>
+        typeof l.anticipo === "number" && Number.isFinite(l.anticipo)
+          ? l
+          : { ...l, anticipo: DEFAULT_ANTICIPO },
+      );
+    }
   } catch {
     return [];
   }
@@ -152,6 +167,8 @@ export interface AddDocumentInput {
   status?: DocumentStatus;
   ceco?: string;
   extracted?: ExtractedFields;
+  purpose?: DocumentPurpose;
+  relatedDocumentId?: string;
 }
 
 export function addDocument(input: AddDocumentInput): DocumentRecord {
@@ -164,6 +181,8 @@ export function addDocument(input: AddDocumentInput): DocumentRecord {
     role: input.role,
     uploadedAt: new Date().toISOString(),
     ceco: input.ceco,
+    purpose: input.purpose,
+    relatedDocumentId: input.relatedDocumentId,
     extracted: input.extracted,
   };
   const all = readDocuments();
@@ -179,6 +198,7 @@ export interface UpdateDocumentPatch {
   extracted?: ExtractedFields;
   duplicateOf?: string[];
   duplicateReason?: DuplicateReason;
+  relatedDocumentId?: string;
 }
 
 export function updateDocument(id: string, patch: UpdateDocumentPatch): DocumentRecord | undefined {
@@ -193,6 +213,9 @@ export function updateDocument(id: string, patch: UpdateDocumentPatch): Document
     ...(patch.extracted !== undefined ? { extracted: patch.extracted } : {}),
     ...(patch.duplicateOf !== undefined ? { duplicateOf: patch.duplicateOf } : {}),
     ...(patch.duplicateReason !== undefined ? { duplicateReason: patch.duplicateReason } : {}),
+    ...(patch.relatedDocumentId !== undefined
+      ? { relatedDocumentId: patch.relatedDocumentId }
+      : {}),
   };
   all[idx] = next;
   writeDocuments(all);
@@ -314,6 +337,7 @@ export function getOrCreateDraftLegalization(): Legalization {
     status: "draft",
     expenseIds: [],
     createdAt: new Date().toISOString(),
+    anticipo: DEFAULT_ANTICIPO,
   };
   writeLegalizations([...all, next]);
   notify();
@@ -344,6 +368,7 @@ export function getActiveLegalization(): Legalization | undefined {
       status: "draft",
       expenseIds: docs.map((d) => d.id),
       createdAt: new Date().toISOString(),
+      anticipo: DEFAULT_ANTICIPO,
     };
     writeLegalizations([...all, migrated]);
     notify();
@@ -402,6 +427,20 @@ export function getLegalizationTotal(id: string): number {
     if (doc) total += parseAmount(doc.extracted?.totalFactura);
   }
   return total;
+}
+
+/** Anticipo en COP del periodo de legalización (default DEFAULT_ANTICIPO). */
+export function getLegalizationAnticipo(id: string): number {
+  const leg = getLegalization(id);
+  return leg?.anticipo ?? DEFAULT_ANTICIPO;
+}
+
+/**
+ * Diferencia = anticipo - gastos justificados. Positiva → saldo a favor del
+ * anticipo (por devolver). Negativa → la empresa debe reembolsar.
+ */
+export function getLegalizationDiferencia(id: string): number {
+  return getLegalizationAnticipo(id) - getLegalizationTotal(id);
 }
 
 export function findLegalizationContainingDoc(docId: string): Legalization | undefined {

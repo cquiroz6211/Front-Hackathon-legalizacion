@@ -14,6 +14,13 @@ export interface Legalization {
   expenseIds: string[];
   createdAt: string;
   submittedAt?: string;
+  /**
+   * Anticipo en COP entregado a la persona para este periodo de legalización.
+   * Es la plata que la empresa adelanta; contra ella se descuentan los gastos
+   * justificados con facturas. La diferencia (anticipo - gastos) indica si hay
+   * saldo por devolver o un monto a reembolsar.
+   */
+  anticipo: number;
 }
 
 /**
@@ -53,6 +60,8 @@ export interface ExtractedFields {
 
 export type DuplicateReason = "same-legalization" | "history" | "indeterminate";
 
+export type DocumentPurpose = "invoice" | "rut" | "collection-account";
+
 export interface DocumentRecord {
   id: string;
   fileName: string;
@@ -62,6 +71,8 @@ export interface DocumentRecord {
   role: Role;
   uploadedAt: string;
   ceco?: string;
+  purpose?: DocumentPurpose;
+  relatedDocumentId?: string;
   extracted?: ExtractedFields;
   duplicateOf?: string[];
   duplicateReason?: DuplicateReason;

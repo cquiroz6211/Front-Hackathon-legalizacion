@@ -8,6 +8,8 @@ import {
   getActiveLegalization,
   getBlockingDuplicates,
   getDocument,
+  getLegalizationAnticipo,
+  getLegalizationDiferencia,
   getLegalizationTotal,
   getOrCreateDraftLegalization,
   listDocuments,
@@ -67,6 +69,8 @@ function seedDoc(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
     status: overrides.status ?? "processing",
     ceco: overrides.ceco,
     extracted: overrides.extracted,
+    purpose: overrides.purpose,
+    relatedDocumentId: overrides.relatedDocumentId,
   });
 }
 
@@ -133,6 +137,47 @@ describe("documentos (store)", () => {
     deleteDocument(created.id);
     expect(getDocument(created.id)).toBeUndefined();
   });
+
+  it("persiste el propósito y la relación explícita entre RUT y cuenta de cobro", () => {
+    const rut = seedDoc({ fileName: "rut.pdf", purpose: "rut" });
+    const account = seedDoc({
+      fileName: "cuenta.pdf",
+      purpose: "collection-account",
+      relatedDocumentId: rut.id,
+    });
+
+    const relatedRut = updateDocument(rut.id, { relatedDocumentId: account.id });
+
+    expect(getDocument(account.id)).toMatchObject({
+      purpose: "collection-account",
+      relatedDocumentId: rut.id,
+    });
+    expect(relatedRut).toMatchObject({ purpose: "rut", relatedDocumentId: account.id });
+  });
+
+  it("lee documentos legacy sin propósito ni relación", () => {
+    window.localStorage.setItem(
+      "comfama.legalizacion.documents.v1",
+      JSON.stringify([
+        {
+          id: "legacy-document",
+          fileName: "legacy.pdf",
+          fileType: "application/pdf",
+          fileSize: 100,
+          status: "upload",
+          role: "personal",
+          uploadedAt: "2024-01-01T00:00:00.000Z",
+        },
+      ]),
+    );
+
+    expect(getDocument("legacy-document")).toMatchObject({
+      id: "legacy-document",
+      fileName: "legacy.pdf",
+    });
+    expect(getDocument("legacy-document")?.purpose).toBeUndefined();
+    expect(getDocument("legacy-document")?.relatedDocumentId).toBeUndefined();
+  });
 });
 
 describe("legalizaciones (store)", () => {
@@ -160,6 +205,50 @@ describe("legalizaciones (store)", () => {
     addExpenseToLegalization(draft.id, a.id);
     addExpenseToLegalization(draft.id, b.id);
     expect(getLegalizationTotal(draft.id)).toBeCloseTo(150000);
+  });
+
+  it("el borrador creado incluye un anticipo por defecto", () => {
+    const draft = getOrCreateDraftLegalization();
+    expect(typeof draft.anticipo).toBe("number");
+    expect(draft.anticipo).toBeGreaterThan(0);
+    expect(getLegalizationAnticipo(draft.id)).toBe(draft.anticipo);
+  });
+
+  it("getLegalizationDiferencia es anticipo - gastos (saldo a favor)", () => {
+    const draft = getOrCreateDraftLegalization();
+    const a = seedDoc({ fileName: "a.pdf", extracted: SAMPLE_FIELDS });
+    addExpenseToLegalization(draft.id, a.id);
+    const gastos = getLegalizationTotal(draft.id);
+    const diferencia = getLegalizationDiferencia(draft.id);
+    expect(diferencia).toBeCloseTo(draft.anticipo - gastos);
+    expect(diferencia).toBeGreaterThan(0);
+  });
+
+  it("diferencia negativa cuando los gastos superan el anticipo (a reembolsar)", () => {
+    const draft = getOrCreateDraftLegalization();
+    const caro = seedDoc({
+      fileName: "caro.pdf",
+      extracted: { ...SAMPLE_FIELDS, totalFactura: "5.000.000,00" },
+    });
+    addExpenseToLegalization(draft.id, caro.id);
+    expect(getLegalizationDiferencia(draft.id)).toBeLessThan(0);
+  });
+
+  it("migra legalizaciones viejas sin anticipo asignando el default", () => {
+    window.localStorage.setItem(
+      "comfama.legalizacion.legalizations.v1",
+      JSON.stringify([
+        {
+          id: "legacy-1",
+          period: "Legacy",
+          status: "submitted",
+          expenseIds: [],
+          createdAt: new Date().toISOString(),
+        },
+      ]),
+    );
+    const anticipo = getLegalizationAnticipo("legacy-1");
+    expect(anticipo).toBeGreaterThan(0);
   });
 
   it("submitLegalization persiste cuando hay al menos un gasto", () => {
