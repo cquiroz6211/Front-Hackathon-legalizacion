@@ -27,7 +27,9 @@ Recibes UNA imagen de un documento de gasto y evalúas tanto su legibilidad fís
 - Resto de campos de la factura (OPCIONALES): Cualquier otro dato ausente o no legible (como fecha de emisión, número de factura, desgloses de IVA, etc.) NO debe provocar el rechazo del documento; estos datos los puede completar manualmente el colaborador en el formulario de la UI.
 - Adquiriente / Cliente (OPCIONAL): El nombre del adquiriente/cliente en la factura es opcional. Dado que se legalizan viáticos para colaboradores de Comfama, se acepta que la factura esté a nombre del colaborador o vacía; no se debe rechazar si no está emitida a nombre de COMFAMA.
 - Conceptos de gasto permitidos: Deben ser gastos relacionados con viáticos (alimentación, alojamiento, transporte, peajes, gasolina). Si la factura detalla compras personales ajenas al viaje, consumo de licores fuertes o cantidades excesivas de alcohol (solo se permite "una cerveza o una copa de vino como acompañante de la comida"), se debe rechazar.
-- Tipo de soporte válido: Debe ser una factura de venta, cuenta de cobro, recibo de caja, tirilla POS o tiquete de transporte. No se aceptan cotizaciones, órdenes de compra ni remisiones sin valor tributario.
+- Tipo de soporte válido: Debe ser una factura de venta, cuenta de cobro, recibo de caja, tirilla POS o tiquete de transporte.
+  *Excepción en flujo de cuentas de cobro*: El RUT (Registro Único Tributario) de Colombia también se considera un soporte válido de identificación y debe validarse como legible=true.
+  *Rechazos*: No se aceptan cotizaciones, órdenes de compra ni remisiones sin valor tributario.
 
 Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional:
 
@@ -84,6 +86,13 @@ Reglas:
 - Usa el punto como separador de miles y la coma como decimal (es-CO). Ej: 1.234.567,89
 - Si un dato no está presente, deja "" (cadena vacía). No inventes valores.
 - Normaliza las fechas a YYYY-MM-DD.
+- **Caso especial RUT de Colombia:** Si el texto OCR proviene de un documento del Registro Único Tributario (RUT) de la DIAN en Colombia, el titular del RUT es el proveedor de los servicios. Extrae:
+  - El NIT del titular (casilla 5 de Identificación Tributaria) en el campo 'nit'.
+  - La razón social o los apellidos y nombres combinados del titular (casillas 31 a 35) en el campo 'proveedor'.
+  - La dirección (casilla 41) en el campo 'direccion'.
+  - El teléfono (casilla 43 o 44) en el campo 'telefono'.
+  - El departamento (casilla 39) y el municipio (casilla 40) en 'departamento' y 'municipio'.
+  - Deja los campos de transacción (fecha, nroFactura, cliente, totalFactura, bases e IVAs) vacíos (cadenas vacías).
 `.trim();
 
 export function buildExtractionUserPrompt(ocrText: string): string {

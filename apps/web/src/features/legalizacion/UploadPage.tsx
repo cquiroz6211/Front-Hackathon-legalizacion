@@ -22,7 +22,6 @@ import {
   updateDocument,
 } from "./lib/store";
 import { getCecos, validateDocument, processDocument, toExtractedFields } from "./lib/api";
-import type { DocumentPurpose } from "./types/document";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png";
@@ -116,18 +115,6 @@ export const UploadPage = () => {
     loadCecos();
   }, []);
 
-  const createDocument = (file: File, purpose: DocumentPurpose, relatedDocumentId?: string) =>
-    addDocument({
-      fileName: file.name,
-      fileType: file.type || "application/octet-stream",
-      fileSize: file.size,
-      role: getRole(),
-      status: "upload",
-      purpose,
-      relatedDocumentId,
-      ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
-    });
-
   const handleContinue = () => {
     if (flow === "invoice" && !invoiceFile) return;
     if (flow === "collection-account" && (!rutFile || !accountFile)) return;
@@ -215,25 +202,136 @@ export const UploadPage = () => {
     }
 
     // Flujo para cuenta de cobro (RUT + Cuenta)
-    if (rutFile && accountFile) {
-      try {
-        const rut = createDocument(rutFile, "rut");
-        const account = createDocument(accountFile, "collection-account", rut.id);
-        updateDocument(rut.id, { relatedDocumentId: account.id });
-        addExpenseToLegalization(draft.id, rut.id);
-        addExpenseToLegalization(draft.id, account.id);
-        setIsProcessing(false);
-        navigate(`/review?doc=${encodeURIComponent(account.id)}`);
-      } catch (error) {
-        setIsProcessing(false);
-        toast({
-          type: "error",
-          title: "No pudimos guardar los documentos",
-          description: error instanceof Error ? error.message : "Inténtalo nuevamente.",
-          showIcon: true,
-          showCloseButton: true,
+    if (flow === "collection-account" && rutFile && accountFile) {
+      // 1. Validamos la calidad y norma de ambos documentos en paralelo
+      Promise.all([validateDocument(rutFile), validateDocument(accountFile)])
+        .then(([rutVal, accountVal]) => {
+          if (!rutVal.ok || !rutVal.quality || !rutVal.quality.legible) {
+            toast({
+              type: "error",
+              title: "RUT no válido o legible",
+              description:
+                rutVal.quality?.recomendacion ??
+                rutVal.error ??
+                "Por favor, sube un documento de RUT válido.",
+              showIcon: true,
+              showCloseButton: true,
+            });
+            setIsProcessing(false);
+            return;
+          }
+
+          if (!accountVal.ok || !accountVal.quality || !accountVal.quality.legible) {
+            toast({
+              type: "error",
+              title: "Cuenta de cobro no válida o legible",
+              description:
+                accountVal.quality?.recomendacion ??
+                accountVal.error ??
+                "La cuenta de cobro no cumple la norma o no es legible.",
+              showIcon: true,
+              showCloseButton: true,
+            });
+            setIsProcessing(false);
+            return;
+          }
+
+          // 2. Si ambos pasan la validación, procesamos la extracción de ambos en paralelo
+          Promise.all([processDocument(rutFile), processDocument(accountFile)])
+            .then(([rutProc, accountProc]) => {
+              if (!rutProc.ok || !rutProc.fields) {
+                toast({
+                  type: "error",
+                  title: "Error al extraer datos del RUT",
+                  description: rutProc.error ?? "No pudimos procesar los datos del RUT.",
+                  showIcon: true,
+                  showCloseButton: true,
+                });
+                setIsProcessing(false);
+                return;
+              }
+
+              if (!accountProc.ok || !accountProc.fields) {
+                toast({
+                  type: "error",
+                  title: "Error al extraer datos de la Cuenta de Cobro",
+                  description:
+                    accountProc.error ?? "No pudimos procesar los datos de la Cuenta de Cobro.",
+                  showIcon: true,
+                  showCloseButton: true,
+                });
+                setIsProcessing(false);
+                return;
+              }
+
+              const rutMapped = toExtractedFields(rutProc.fields);
+              const accountMapped = toExtractedFields(accountProc.fields);
+
+              // 3. Consolidamos los datos
+              // Datos del emisor vienen del RUT, datos financieros e identificadores de la cuenta de cobro
+              const consolidatedFields = {
+                ...accountMapped,
+                proveedor: rutMapped.proveedor || accountMapped.proveedor,
+                nit: rutMapped.nit || accountMapped.nit,
+                direccion: rutMapped.direccion || accountMapped.direccion,
+                telefono: rutMapped.telefono || accountMapped.telefono,
+                departamento: rutMapped.departamento || accountMapped.departamento,
+                municipio: rutMapped.municipio || accountMapped.municipio,
+              };
+
+              // 4. Guardamos ambos documentos en el local store
+              const rutDoc = addDocument({
+                fileName: rutFile.name,
+                fileType: rutFile.type || "application/octet-stream",
+                fileSize: rutFile.size,
+                role: getRole(),
+                status: "processing",
+                purpose: "rut",
+                extracted: rutMapped,
+                ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
+              });
+
+              const accountDoc = addDocument({
+                fileName: accountFile.name,
+                fileType: accountFile.type || "application/octet-stream",
+                fileSize: accountFile.size,
+                role: getRole(),
+                status: "processing",
+                purpose: "collection-account",
+                relatedDocumentId: rutDoc.id,
+                extracted: consolidatedFields,
+                ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
+              });
+
+              updateDocument(rutDoc.id, { relatedDocumentId: accountDoc.id });
+
+              addExpenseToLegalization(draft.id, rutDoc.id);
+              addExpenseToLegalization(draft.id, accountDoc.id);
+
+              setIsProcessing(false);
+              navigate(`/review?doc=${encodeURIComponent(accountDoc.id)}`);
+            })
+            .catch((err: unknown) => {
+              toast({
+                type: "error",
+                title: "Error de procesamiento",
+                description: err instanceof Error ? err.message : "Inténtalo nuevamente.",
+                showIcon: true,
+                showCloseButton: true,
+              });
+              setIsProcessing(false);
+            });
+        })
+        .catch((err: unknown) => {
+          toast({
+            type: "error",
+            title: "Error al validar documentos",
+            description: err instanceof Error ? err.message : "Inténtalo nuevamente.",
+            showIcon: true,
+            showCloseButton: true,
+          });
+          setIsProcessing(false);
         });
-      }
     }
   };
 
