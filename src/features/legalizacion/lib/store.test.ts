@@ -5,11 +5,14 @@ import {
   addExpenseToLegalization,
   deleteDocument,
   duplicateKey,
+  filterLegalizationsByDateRange,
   getActiveLegalization,
   getBlockingDuplicates,
   getDocument,
   getLegalizationAnticipo,
+  getLegalizationConsumoDate,
   getLegalizationDiferencia,
+  getLegalizationRegistroDate,
   getLegalizationTotal,
   getOrCreateDraftLegalization,
   listDocuments,
@@ -22,7 +25,7 @@ import {
   updateDocument,
   validatePropina,
 } from "./store";
-import type { DocumentRecord, ExtractedFields } from "../types/document";
+import type { DocumentRecord, ExtractedFields, Legalization } from "../types/document";
 
 const KEYS = [
   "comfama.legalizacion.documents.v1",
@@ -72,6 +75,30 @@ function seedDoc(overrides: Partial<DocumentRecord> = {}): DocumentRecord {
     purpose: overrides.purpose,
     relatedDocumentId: overrides.relatedDocumentId,
   });
+}
+
+const LEGALIZATIONS_KEY = "comfama.legalizacion.legalizations.v1";
+
+/**
+ * Escribe una legalización directamente en localStorage con timestamps
+ * controlados (sin depender de `new Date()`), para que los filtros por fecha
+ * sean deterministas. Mismo patrón que los tests de datos legacy.
+ */
+function seedLegalizationRaw(over: Partial<Legalization> & { id: string }): Legalization {
+  const base: Legalization = {
+    id: over.id,
+    period: over.period ?? "Periodo",
+    status: over.status ?? "draft",
+    expenseIds: over.expenseIds ?? [],
+    createdAt: over.createdAt ?? "2024-01-01T00:00:00.000Z",
+    submittedAt: over.submittedAt,
+    anticipo: over.anticipo ?? 1_500_000,
+  };
+  const raw = window.localStorage.getItem(LEGALIZATIONS_KEY);
+  const list = raw ? (JSON.parse(raw) as Legalization[]) : [];
+  list.push(base);
+  window.localStorage.setItem(LEGALIZATIONS_KEY, JSON.stringify(list));
+  return base;
 }
 
 describe("parseAmount", () => {
@@ -323,5 +350,137 @@ describe("detección de duplicados (HU-0007)", () => {
     const blocking = getBlockingDuplicates(draft.id);
     expect(blocking).toContain(a.id);
     expect(blocking).toContain(b.id);
+  });
+});
+
+describe("HU-0010 — fechas de consumo/registro", () => {
+  it("getLegalizationConsumoDate devuelve la extracted.fecha más temprana", () => {
+    const early = seedDoc({
+      fileName: "early.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-01" },
+    });
+    const late = seedDoc({
+      fileName: "late.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-15" },
+    });
+    seedLegalizationRaw({ id: "leg-consumo", expenseIds: [late.id, early.id] });
+
+    expect(getLegalizationConsumoDate("leg-consumo")).toBe("2024-03-01");
+  });
+
+  it("getLegalizationConsumoDate es null cuando no hay documentos con fecha", () => {
+    const sinFecha = seedDoc({ fileName: "nofecha.pdf", extracted: undefined });
+    seedLegalizationRaw({ id: "leg-null", expenseIds: [sinFecha.id] });
+
+    expect(getLegalizationConsumoDate("leg-null")).toBeNull();
+  });
+
+  it("getLegalizationConsumoDate es null para una legalización inexistente o sin gastos", () => {
+    seedLegalizationRaw({ id: "leg-vacia", expenseIds: [] });
+    expect(getLegalizationConsumoDate("leg-vacia")).toBeNull();
+    expect(getLegalizationConsumoDate("no-existe")).toBeNull();
+  });
+
+  it("getLegalizationRegistroDate usa submittedAt si existe, si no createdAt", () => {
+    seedLegalizationRaw({
+      id: "leg-enviada",
+      status: "submitted",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      submittedAt: "2024-05-10T12:30:00.000Z",
+    });
+    seedLegalizationRaw({ id: "leg-borrador", createdAt: "2024-01-15T08:00:00.000Z" });
+
+    expect(getLegalizationRegistroDate("leg-enviada")).toBe("2024-05-10");
+    expect(getLegalizationRegistroDate("leg-borrador")).toBe("2024-01-15");
+  });
+});
+
+describe("HU-0010 — filterLegalizationsByDateRange", () => {
+  function buildFixtures() {
+    // consumo 2024-02-01, registro 2024-02-01
+    const docFeb = seedDoc({
+      fileName: "feb.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-02-01" },
+    });
+    seedLegalizationRaw({
+      id: "leg-feb",
+      createdAt: "2024-02-01T00:00:00.000Z",
+      expenseIds: [docFeb.id],
+    });
+    // consumo 2024-03-10, registro 2024-03-12 (enviada)
+    const docMar = seedDoc({
+      fileName: "mar.pdf",
+      extracted: { ...SAMPLE_FIELDS, fecha: "2024-03-10" },
+    });
+    seedLegalizationRaw({
+      id: "leg-mar",
+      status: "submitted",
+      createdAt: "2024-03-10T00:00:00.000Z",
+      submittedAt: "2024-03-12T00:00:00.000Z",
+      expenseIds: [docMar.id],
+    });
+    // sin fecha de consumo
+    const docSin = seedDoc({ fileName: "sin.pdf", extracted: undefined });
+    seedLegalizationRaw({
+      id: "leg-sin-consumo",
+      createdAt: "2024-03-20T00:00:00.000Z",
+      expenseIds: [docSin.id],
+    });
+    return listLegalizations();
+  }
+
+  it("sin filtros devuelve todos los elementos (copia, sin mutar la entrada)", () => {
+    const items = buildFixtures();
+    const filtered = filterLegalizationsByDateRange(items, {});
+    expect(filtered.length).toBe(items.length);
+    expect(filtered).not.toBe(items);
+  });
+
+  it("filtra por rango de consumo incluyendo límites (inclusive)", () => {
+    const items = buildFixtures();
+    const soloMar = filterLegalizationsByDateRange(items, {
+      consumo: { from: "2024-03-01", to: "2024-03-31" },
+    });
+    expect(soloMar.map((l) => l.id)).toEqual(["leg-mar"]);
+
+    const ambos = filterLegalizationsByDateRange(items, {
+      consumo: { from: "2024-02-01", to: "2024-03-10" },
+    });
+    expect(ambos.map((l) => l.id).sort()).toEqual(["leg-feb", "leg-mar"]);
+  });
+
+  it("una legalización sin fecha de consumo queda fuera del filtro por consumo", () => {
+    const items = buildFixtures();
+    const res = filterLegalizationsByDateRange(items, {
+      consumo: { from: "2020-01-01", to: "2030-12-31" },
+    });
+    expect(res.map((l) => l.id).sort()).toEqual(["leg-feb", "leg-mar"]);
+    expect(res.map((l) => l.id)).not.toContain("leg-sin-consumo");
+  });
+
+  it("filtra por rango de registro (usa submittedAt ?? createdAt)", () => {
+    const items = buildFixtures();
+    const res = filterLegalizationsByDateRange(items, {
+      registro: { from: "2024-03-11", to: "2024-03-13" },
+    });
+    expect(res.map((l) => l.id)).toEqual(["leg-mar"]);
+  });
+
+  it("combina consumo y registro con AND", () => {
+    const items = buildFixtures();
+    const res = filterLegalizationsByDateRange(items, {
+      consumo: { from: "2024-03-01", to: "2024-03-31" },
+      registro: { from: "2024-03-11", to: "2024-03-13" },
+    });
+    expect(res.map((l) => l.id)).toEqual(["leg-mar"]);
+  });
+
+  it("acepta from y to de forma independiente (solo from, solo to)", () => {
+    const items = buildFixtures();
+    const soloFrom = filterLegalizationsByDateRange(items, { consumo: { from: "2024-03-01" } });
+    expect(soloFrom.map((l) => l.id)).toEqual(["leg-mar"]);
+
+    const soloTo = filterLegalizationsByDateRange(items, { consumo: { to: "2024-02-28" } });
+    expect(soloTo.map((l) => l.id)).toEqual(["leg-feb"]);
   });
 });
