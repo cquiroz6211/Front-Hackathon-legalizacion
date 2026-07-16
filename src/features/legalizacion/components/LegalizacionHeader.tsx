@@ -86,10 +86,10 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
           size="sm"
           aria-label="Historial de gastos"
           action={() => navigate("/history")}
-          className="hidden sm:inline-flex"
+          className="inline-flex"
         >
           <LuHistory className="h-5 w-5 text-secondary-600" />
-          Historial
+          <span className="hidden sm:inline">Historial</span>
         </Button>
 
         <Button
