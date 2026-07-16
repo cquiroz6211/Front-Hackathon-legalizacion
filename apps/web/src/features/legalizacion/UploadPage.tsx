@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LuArrowLeft,
@@ -12,7 +12,7 @@ import {
   LuUpload,
 } from "react-icons/lu";
 
-import { Alert, Button, Input, Typography, useToast } from "@comfama/comfama-ui-react";
+import { Alert, Button, Select, Typography, useToast } from "@comfama/comfama-ui-react";
 
 import {
   addDocument,
@@ -21,11 +21,17 @@ import {
   getRole,
   updateDocument,
 } from "./lib/store";
+import { getCecos } from "./lib/api";
 import type { DocumentPurpose } from "./types/document";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png";
 type UploadFlow = "invoice" | "collection-account";
+
+interface CecoOption {
+  value: string;
+  label: string;
+}
 
 export const UploadPage = () => {
   const navigate = useNavigate();
@@ -36,6 +42,41 @@ export const UploadPage = () => {
   const [accountFile, setAccountFile] = useState<File | null>(null);
   const [ceco, setCeco] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [cecoOptions, setCecoOptions] = useState<CecoOption[]>([]);
+  const [cecosLoading, setCecosLoading] = useState(false);
+  const [cecosError, setCecosError] = useState<string | null>(null);
+
+  const loadCecos = () => {
+    setCecosLoading(true);
+    setCecosError(null);
+    getCecos()
+      .then((res) => {
+        if (!res.ok || !res.cecos) {
+          setCecoOptions([]);
+          setCecosError(res.error ?? "No se pudieron cargar los centros de costo.");
+          return;
+        }
+        const options = res.cecos
+          .map((raw) => {
+            const c = raw as Record<string, unknown>;
+            const code = String(c.kostl ?? "").trim();
+            const desc = String(c.txtmd ?? c.txtsh ?? c.txtmc ?? "").trim();
+            return { value: code, label: desc ? `${code} — ${desc}` : code };
+          })
+          .filter((option) => option.value !== "");
+        setCecoOptions(options);
+      })
+      .catch((error: unknown) => {
+        setCecoOptions([]);
+        setCecosError(error instanceof Error ? error.message : "Error al consultar los CECOs.");
+      })
+      .finally(() => setCecosLoading(false));
+  };
+
+  // Consulta los CECOs al backend al montar la vista.
+  useEffect(() => {
+    loadCecos();
+  }, []);
 
   const createDocument = (file: File, purpose: DocumentPurpose, relatedDocumentId?: string) =>
     addDocument({
@@ -83,8 +124,7 @@ export const UploadPage = () => {
     }
   };
 
-  const canContinue =
-    flow === "invoice" ? Boolean(invoiceFile) : Boolean(rutFile && accountFile);
+  const canContinue = flow === "invoice" ? Boolean(invoiceFile) : Boolean(rutFile && accountFile);
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary-100">
@@ -112,12 +152,34 @@ export const UploadPage = () => {
 
             {flow === "invoice" ? (
               <div className="space-y-5 rounded-2xl border border-secondary-400 bg-white p-6 md:p-8">
-                <Input
-                  label="Centro de costo (CECO)"
-                  value={ceco}
-                  onChange={(event) => setCeco(event.target.value)}
-                  placeholder="700-OP-24"
-                />
+                <div className="space-y-2">
+                  <Select
+                    showSearch
+                    label="Centro de costo (CECO)"
+                    placeholder={
+                      cecosLoading ? "Cargando centros de costo…" : "Busca por código o nombre"
+                    }
+                    options={cecoOptions}
+                    value={ceco}
+                    onChange={(value) => setCeco(Array.isArray(value) ? (value[0] ?? "") : value)}
+                    disabled={cecosLoading || cecoOptions.length === 0}
+                    color={cecosError ? "error" : "default"}
+                    helperText={
+                      cecosError ?? "Selecciona el centro de costo al que se facturará este gasto."
+                    }
+                  />
+                  {cecosError && (
+                    <Button
+                      variant="ghost"
+                      action={loadCecos}
+                      disabled={cecosLoading}
+                      className="min-h-10 px-3"
+                    >
+                      <LuRefreshCw className="mr-2 h-4 w-4" />
+                      Reintentar cargar CECOs
+                    </Button>
+                  )}
+                </div>
                 <FileUploader
                   label="Factura"
                   description="PDF, JPG o PNG"
@@ -162,11 +224,7 @@ export const UploadPage = () => {
             <LuCircleX className="mr-2 h-4 w-4" />
             Cancelar
           </Button>
-          <Button
-            disabled={!canContinue || isProcessing}
-            className="px-8"
-            action={handleContinue}
-          >
+          <Button disabled={!canContinue || isProcessing} className="px-8" action={handleContinue}>
             {isProcessing ? (
               <>
                 <LuRefreshCw className="mr-2 h-5 w-5 animate-spin" />
@@ -292,20 +350,43 @@ const FileUploader = ({ label, description, file, onChange, allowCamera }: FileU
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
-        <Button variant={file ? "outlined" : "contained"} className="min-h-12 flex-1" action={() => inputRef.current?.click()}>
+        <Button
+          variant={file ? "outlined" : "contained"}
+          className="min-h-12 flex-1"
+          action={() => inputRef.current?.click()}
+        >
           <LuUpload className="mr-2 h-4 w-4" />
           {file ? "Reemplazar documento" : "Subir documento"}
         </Button>
         {allowCamera && (
-          <Button variant="outlined" className="min-h-12 flex-1" action={() => cameraRef.current?.click()}>
+          <Button
+            variant="outlined"
+            className="min-h-12 flex-1"
+            action={() => cameraRef.current?.click()}
+          >
             <LuCamera className="mr-2 h-4 w-4" />
             Tomar foto
           </Button>
         )}
       </div>
-      <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} onChange={handleFile} className="hidden" aria-label={`Seleccionar ${label}`} />
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPTED_TYPES}
+        onChange={handleFile}
+        className="hidden"
+        aria-label={`Seleccionar ${label}`}
+      />
       {allowCamera && (
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" aria-label={`Tomar foto de ${label}`} />
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFile}
+          className="hidden"
+          aria-label={`Tomar foto de ${label}`}
+        />
       )}
     </section>
   );

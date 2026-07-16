@@ -1,166 +1,117 @@
-# baseline-front-comfama
+# Legalización de Gastos — Monorepo
 
-Plantilla **base (baseline)** para frontends de Comfama. Provee una configuración
-estándar y opinada para arrancar nuevos proyectos con:
+Portal de legalización de gastos de viaje. Monorepo con **frontend** (Vite + React,
+baseline Comfama) y **backend** (Express) que orquesta OCR, extracción con IA,
+Centros de Costo, SAP y DocuWare.
 
-- **React 19 + TypeScript + Vite** como stack base.
-- **Screaming Architecture**: la estructura de carpetas grita el dominio de negocio.
-- Alineación al **Sistema de Diseño de Comfama** mediante la librería de componentes
-  [`@comfama/comfama-ui-react`](https://github.com/comfama/comfama-ui-react).
-- Tooling estándar: Oxlint + Oxfmt, Vitest, Lefthook + Commitlint, y pipeline de
-  Azure DevOps con 3 ambientes (dev, qa, pdn).
+> El backend nació como Route Handlers de Next.js. Por política de empresa el
+> frontend se movió a Vite; el backend se migró a un **servidor Express autónomo**
+> reutilizando intacta la lógica de integración (`lib/server`). Ver
+> [`apps/api/README.md`](./apps/api/README.md) y [`docs/MIGRACION.md`](./docs/MIGRACION.md).
 
-## Stack
-
-| Área           | Herramienta                                    |
-| -------------- | ---------------------------------------------- |
-| UI             | React 19, `@comfama/comfama-ui-react`          |
-| Lenguaje       | TypeScript                                     |
-| Bundler / dev  | Vite 8                                         |
-| Estilos        | Tailwind CSS v4 + tokens del theme de la libui |
-| Lint / formato | Oxlint, Oxfmt                                  |
-| Pruebas        | Vitest + Testing Library (jsdom)               |
-| Git hooks      | Lefthook (+ Commitlint)                        |
-| CI/CD          | Azure DevOps (`Pipeline/`)                     |
-
-## Arquitectura (Screaming Architecture)
-
-La organización por **dominio de negocio**, no por tipo técnico. Al abrir `src/`
-se debe entender _qué hace la aplicación_, no con qué framework está hecha.
+## Estructura
 
 ```
-src/
-├── main.tsx        # Punto de entrada (bootstrap de React)
-├── App.tsx         # Componente raíz / layout inicial
-├── config/         # Configuración transversal (variables de entorno, constantes)
-│   └── env.ts      # Acceso único y validado a import.meta.env
-├── features/       # ← EL DOMINIO GRITA AQUÍ. Una carpeta por caso de uso.
-│   └── <dominio>/  #   p. ej. afiliaciones, subsidios, citas-medicas
-│       ├── components/   # UI propia de la feature (ensambla átomos de la libui)
-│       ├── hooks/
-│       ├── services/     # llamadas a API / casos de uso
-│       ├── types/
-│       └── index.ts      # API pública de la feature
-├── shared/         # Reutilizable entre features (no depende de features/)
-│   ├── components/ # composiciones/wrappers sobre la libui
-│   ├── hooks/
-│   └── lib/        # utilidades, helpers, clientes http
-└── styles/         # Estilos globales + import del theme de la libui
-    └── index.css
+.
+├── apps/
+│   ├── web/          # Frontend Vite + React 19 + React Router (baseline Comfama)
+│   │   ├── src/
+│   │   │   └── features/legalizacion/
+│   │   │       └── lib/api.ts      # ← cliente HTTP que consume el backend
+│   │   └── env/                    # VITE_APP_ENV, VITE_API_URL (envDir de Vite)
+│   └── api/          # Backend Express (OCR + IA + CECOs + SAP + DocuWare)
+│       ├── src/
+│       │   ├── index.ts            # bootstrap + listen
+│       │   ├── app.ts              # middlewares + montaje de rutas /api/*
+│       │   ├── routes/             # 9 endpoints (health, process, ocr, ...)
+│       │   └── lib/server/         # lógica de integración (reusada tal cual)
+│       └── .env.example
+├── package.json      # npm workspaces + scripts de orquestación
+├── lefthook.yml      # git hooks (raíz)
+└── Pipeline/         # CI
 ```
-
-**Reglas:**
-
-- Una feature solo se consume a través de su `index.ts`; no se importan archivos
-  internos de otra feature.
-- La dependencia va en un sentido: `features → shared`. `shared/` nunca importa de
-  `features/`.
-- Alias de importación: `@/` apunta a `src/` (ej. `import { env } from '@/config/env'`).
-
-Ver `src/features/README.md` y `src/shared/README.md` para el detalle de cada zona.
-
-## Sistema de Diseño de Comfama
-
-Este es un **proyecto implementador** de la librería. Por tanto:
-
-- **Componentes:** importa desde el paquete npm:
-  `import { Button } from '@comfama/comfama-ui-react'`.
-- **Cero HTML nativo para UI**: usa los átomos/componentes de la librería en vez de
-  `<button>`, `<input>`, `<h1>`, `<p>`, etc.
-- **Tailwind sin prefijo**: las clases se escriben nativas (`flex`, `p-4`), **sin**
-  el prefijo `cfm:` (ese prefijo es solo para desarrollo interno de la librería).
-- **Tokens del theme**: colores, radios y breakpoints vienen del theme de la
-  librería (importado en `src/styles/index.css`). No uses valores arbitrarios
-  (`w-[300px]`) ni estilos en línea.
-
-Los detalles y catálogos viven en los skills `01-cfm-design-tokens`,
-`02-cfm-atoms-registry` y `03-cfm-component-registry`, y las reglas para agentes en
-[`AGENTS.md`](./AGENTS.md).
 
 ## Requisitos
 
-- Node.js **22.x** (ver `engines` en `package.json`).
+- **Node.js 20+** (probado con Node 25 / npm 11).
+- Para `apps/web`: acceso al **registro privado de Comfama (Artifactory)**, porque
+  usa `@comfama/comfama-ui-react` y `@comfama/frontend-utils`. Necesitas un
+  `.npmrc` (gitignored) con el scope `@comfama` apuntando a ese registro y su token.
+  Sin él, `npm install` falla con `404 @comfama/...` — es esperado fuera de la red
+  corporativa.
 
-## Primeros pasos
+## Instalación
 
 ```bash
-npm install              # instala dependencias y configura hooks de git (prepare)
-cp env/.env.local.example env/.env.local   # crea tu config local
-npm run dev              # levanta el servidor de desarrollo
+# En una máquina con el .npmrc de Comfama configurado:
+npm install --ignore-scripts   # instala ambos workspaces (lockfile único en la raíz)
 ```
 
-La configuración autenticada de npm para el paquete privado `@comfama` es local y no se versiona. Cada colaborador debe configurar sus credenciales de acceso al registro antes de ejecutar `npm install`.
+> **Por qué `--ignore-scripts`:** el `postinstall.cjs` de `@comfama/comfama-ui-react`
+> crashea con Node 25 (código `3221226505`). Saltarlo no afecta a Vite/runtime (el
+> paquete ya trae su `dist/`). El baseline pide **Node 22.x**; con Node 22 podrías
+> omitir el flag. La primera vez, si una instalación previa dejó `node_modules` a
+> medias, corre con el server detenido para evitar `EPERM` por archivos en uso.
+
+Solo el backend (deps 100 % públicas, no requiere el registro de Comfama):
+
+```bash
+cd apps/api && npm install --no-workspaces
+```
 
 ## Variables de entorno
 
-Los archivos `.env` viven en la carpeta `env/` (configurado vía `envDir` en
-`vite.config.ts`). Solo las variables con prefijo `VITE_` se exponen al cliente.
+| Workspace  | Archivo                         | Cómo crearlo                              |
+|------------|---------------------------------|-------------------------------------------|
+| `apps/api` | `apps/api/.env`                 | `cp apps/api/.env.example apps/api/.env`  |
+| `apps/web` | `apps/web/env/.env.local`       | `cp apps/web/env/.env.local.example apps/web/env/.env.local` |
 
-| Archivo                  | Uso                                           | Versionado |
-| ------------------------ | --------------------------------------------- | ---------- |
-| `env/.env.local`         | Trabajo local (`npm run dev`)                 | ❌ no      |
-| `env/.env.local.example` | Plantilla de `.env.local`                     | ✅ sí      |
-| `env/.env.dev`           | Ambiente DEV (`npm run build:dev`)            | ❌ no      |
-| `env/.env.qa`            | Ambiente QA (`npm run build:qa`)              | ❌ no      |
-| `env/.env.pdn`           | Ambiente PDN/producción (`npm run build:pdn`) | ❌ no      |
+- `apps/web` → `VITE_API_URL` **ya incluye** el prefijo `/api`
+  (por defecto `http://localhost:3001/api`).
+- `apps/api` → credenciales de Azure / Comfama / DocuWare. **Nunca** se commitea
+  (`.env` está en `.gitignore`); solo se versiona `.env.example`.
 
-Los archivos de ambiente por entorno se crean localmente o se inyectan desde CI/CD. Solo deben contener configuración pública; los secretos deben gestionarse fuera del repositorio.
+## Ejecutar
 
-Acceso en código vía `src/config/env.ts` (valida al arranque):
+```bash
+npm run dev        # levanta API (3001) y Web (5173) juntos (concurrently)
+npm run dev:api    # solo backend  → http://localhost:3001
+npm run dev:web    # solo frontend → http://localhost:5173
+```
+
+Otros scripts: `npm run build`, `npm run typecheck`, `npm run build:web`,
+`npm run build:api`, `npm run start:api`.
+
+## Cómo consume el frontend al backend
+
+El cliente vive en `apps/web/src/features/legalizacion/lib/api.ts` y se exporta
+desde la feature:
 
 ```ts
-import { env } from "@/config/env";
+import { processDocument, getCecos, toExtractedFields } from "@/features/legalizacion";
 
-fetch(`${env.apiUrl}/usuarios`);
-if (env.isProduction) {
-  /* ... */
+const res = await processDocument(file);          // OCR + extracción IA
+if (res.ok && res.fields) {
+  const fields = toExtractedFields(res.fields);   // mapea al modelo del front
 }
 ```
 
-## Scripts
+La base sale de `VITE_API_URL` (`@/config/env`). El backend habilita **CORS**
+abierto en desarrollo, así que el front (5173) llama al API (3001) sin proxy.
 
-| Script                       | Descripción                                           |
-| ---------------------------- | ----------------------------------------------------- |
-| `dev`                        | Servidor de desarrollo                                |
-| `build`                      | Build de producción (modo por defecto)                |
-| `build:dev` / `:qa` / `:pdn` | Build por ambiente (carga `env/.env.<modo>`)          |
-| `preview`                    | Sirve el build localmente                             |
-| `lint` / `lint:fix`          | Oxlint (con `--fix`)                                  |
-| `format` / `format:check`    | Oxfmt                                                 |
-| `typecheck`                  | Type-check con `tsc -b --noEmit`                      |
-| `test` / `test:run`          | Vitest (watch / una pasada)                           |
-| `test:coverage`              | Tests con cobertura                                   |
-| `test:junit`                 | Reporte JUnit (`coverage/junit.xml`) para el pipeline |
-| `test:lcov` / `test:sonar`   | Cobertura lcov para SonarQube                         |
+## Estado y pendientes
 
-## Pruebas
-
-Vitest + Testing Library con entorno `jsdom`. El setup global está en
-`src/setupTest.ts`. Los archivos de prueba se ubican junto al código (`*.test.tsx`).
-
-```bash
-npm run test:run        # una pasada
-npm run test:coverage   # con cobertura
-```
-
-## Calidad de código y hooks
-
-[Lefthook](https://lefthook.dev) gestiona los hooks de git (se instalan solos con
-`npm install` vía el script `prepare`):
-
-- **pre-commit**: `oxfmt --write` + `oxlint --fix` sobre los archivos en stage.
-- **pre-push**: `vitest run --changed` (tests de lo modificado).
-- **commit-msg**: `commitlint` valida [Conventional Commits](https://www.conventionalcommits.org/).
-
-## Build y despliegue
-
-El pipeline de Azure DevOps está en `Pipeline/`, con variables por ambiente en
-`Pipeline/variables/`. La rama determina el ambiente: `Develop`→dev,
-`Integration`→qa, `master`→pdn. El build de cada ambiente usa `npm run build:<modo>`
-y publica el contenido de `dist/`.
-
-## Convenciones de commits
-
-Conventional Commits, validado por commitlint. Detalle y ejemplos en
-[`AGENTS.md`](./AGENTS.md). Hay una plantilla en `.gitmessage` (registrada como
-`commit.template`).
+- ✅ Backend migrado a Express y **verificado en vivo**: `health`, `openapi`,
+  ruteo, manejo de errores y CORS OK. Tokenizer JWT de Comfama funcionando
+  end-to-end.
+- ✅ **CECOs funcionando end-to-end en PROD** (`{ ok:true, count, cecos }`). Clave:
+  `COMFAMA_ORIGIN=https://www.comfama.com` — el JWT se acuña según ese Origin y
+  PROD-CECOs devuelve `403` si el token se acuñó con un origin de QA.
+- ✅ **SAP funcionando end-to-end en QA** (`/api/contabilizacion` → `sapStatus:200`).
+  CECOs y SAP usan **tokenizers independientes** (CECOs PROD, SAP QA) con cachés
+  separadas: `COMFAMA_SAP_TOKENIZER_URL/APIKEY/ORIGIN` para SAP.
+- ⚠️ **DocuWare** trae valores de ejemplo (`MI-HOST`, `PEGA_AQUI_...`). Rellénalos
+  para probar `/api/archive`.
+- ⚠️ `apps/web` no se pudo instalar/buildear en este entorno por el registro
+  privado de Comfama; el cliente API es type-safe frente a `env.ts` y el contrato
+  del backend.

@@ -70,3 +70,32 @@ export type {
   PropinaValidation,
   SubmitToGestorSapResult,
 } from "./lib/store";
+
+// Cliente HTTP del backend (apps/api). Permite a las vistas consumir OCR,
+// extracción IA, CECOs, SAP y DocuWare vía el server Express.
+export {
+  archiveDocument,
+  extractFromText,
+  fileToBase64,
+  getCecos,
+  getContabilizacion,
+  getHealth,
+  ocrDocument,
+  postContabilizacion,
+  processDocument,
+  toExtractedFields,
+  validateDocument,
+} from "./lib/api";
+export type {
+  ArchiveResponse,
+  BackendExtractedFields,
+  CecosResponse,
+  DiTable,
+  ExtractResponse,
+  HealthResponse,
+  OcrResponse,
+  ProcessResponse,
+  QualityCheck,
+  SapResponse,
+  ValidateResponse,
+} from "./lib/api";

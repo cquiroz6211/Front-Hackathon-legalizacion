@@ -15,7 +15,13 @@ import {
 
 import { Alert, Button, DateField, Input, Typography } from "@comfama/comfama-ui-react";
 
-import { CONSUMPTION_LIMIT, getDocument, parseAmount, updateDocument, validatePropina } from "./lib/store";
+import {
+  CONSUMPTION_LIMIT,
+  getDocument,
+  parseAmount,
+  updateDocument,
+  validatePropina,
+} from "./lib/store";
 import type { DocumentRecord, ExtractedFields } from "./types/document";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
