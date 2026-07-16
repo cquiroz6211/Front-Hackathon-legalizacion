@@ -1,15 +1,12 @@
 {
   "name": "baseline-front-comfama",
+  "version": "0.0.0",
   "private": true,
   "description": "baseline-front-comfama",
-  "author": "Plataformas Digitales",
   "keywords": [
     "gatsby"
   ],
-  "engines": {
-    "node": "22.x"
-  },
-  "version": "0.0.0",
+  "author": "Plataformas Digitales",
   "type": "module",
   "scripts": {
     "prepare": "lefthook install && git config commit.template .gitmessage",
@@ -64,5 +61,8 @@
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

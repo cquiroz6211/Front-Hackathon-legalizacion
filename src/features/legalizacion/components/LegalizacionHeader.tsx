@@ -1,11 +1,9 @@
-import { Link } from "react-router-dom";
-import {
-  LuArrowLeft,
-  LuBell,
-  LuCircleHelp,
-} from "react-icons/lu";
+import { Link, useNavigate } from "react-router-dom";
+import { LuArrowLeft, LuBell, LuCircleHelp, LuLogOut } from "react-icons/lu";
 
 import { Button, Typography } from "@comfama/comfama-ui-react";
+
+import { signOut } from "@/features/auth";
 
 /** Path público: servido por Vite desde /public. Usamos string literal para
  *  evitar que el pipeline de Vitest tenga que transformar el asset. */
@@ -25,8 +23,16 @@ const USER_ID = "12.345.678";
  * Sustituye al shell global (`AppHeader` + `AppSidebar`) para dar identidad
  * propia al flujo, manteniendo los tokens del design system Comfama.
  */
-export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
-  <header className="flex items-center justify-between gap-4 border-b border-secondary-400 bg-white px-6 h-16 sticky top-0 z-40">
+export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => {
+  const navigate = useNavigate();
+
+  const handleSignOut = () => {
+    signOut();
+    navigate("/login", { replace: true });
+  };
+
+  return (
+    <header className="flex items-center justify-between gap-4 border-b border-secondary-400 bg-white px-6 h-16 sticky top-0 z-40">
     <div className="flex items-center gap-4">
       <Link to="/" aria-label="Inicio">
         <img src={COMFAMA_LOGO_SRC} alt="Comfama" width={143} height={24} />
@@ -36,10 +42,7 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         <>
           <div className="hidden md:block h-8 w-px bg-secondary-400 mx-2" />
           <div className="hidden md:flex flex-col">
-            <Typography
-              variant="subtitle2"
-              className="text-secondary-600 uppercase tracking-wider"
-            >
+            <Typography variant="subtitle2" className="text-secondary-600 uppercase tracking-wider">
               Operador
             </Typography>
             <Typography variant="body1" className="font-semibold text-secondary-900">
@@ -56,10 +59,7 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
           <Typography variant="subtitle2" className="font-semibold text-secondary-900">
             {USER_NAME}
           </Typography>
-          <Typography
-            variant="body2"
-            className="text-secondary-600 uppercase tracking-wider"
-          >
+          <Typography variant="body2" className="text-secondary-600 uppercase tracking-wider">
             ID: {USER_ID}
           </Typography>
         </div>
@@ -92,14 +92,19 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         )}
       </Button>
 
+      <Button variant="ghost" isIcon size="sm" aria-label="Ayuda" action={() => undefined}>
+        <LuCircleHelp className="h-5 w-5 text-secondary-600" />
+      </Button>
+
       <Button
         variant="ghost"
         isIcon
         size="sm"
-        aria-label="Ayuda"
-        action={() => undefined}
+        aria-label="Cerrar sesión"
+        action={handleSignOut}
+        className="text-secondary-600 hover:text-error"
       >
-        <LuCircleHelp className="h-5 w-5 text-secondary-600" />
+        <LuLogOut className="h-5 w-5" />
       </Button>
 
       <Link
@@ -108,9 +113,12 @@ export const LegalizacionHeader = ({ variant }: LegalizacionHeaderProps) => (
         aria-label="Mi perfil"
       >
         <span className="text-secondary-700 text-xs font-semibold">
-          {USER_NAME.split(" ").map((p) => p[0]).join("")}
+          {USER_NAME.split(" ")
+            .map((p) => p[0])
+            .join("")}
         </span>
       </Link>
     </div>
   </header>
-);
+  );
+};

@@ -39,8 +39,7 @@ const SPANISH_MONTHS = [
   "Diciembre",
 ];
 
-const isBrowser = () =>
-  typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
 function safeGet(key: string): string | null {
   if (!isBrowser()) return null;
@@ -182,10 +181,7 @@ export interface UpdateDocumentPatch {
   duplicateReason?: DuplicateReason;
 }
 
-export function updateDocument(
-  id: string,
-  patch: UpdateDocumentPatch,
-): DocumentRecord | undefined {
+export function updateDocument(id: string, patch: UpdateDocumentPatch): DocumentRecord | undefined {
   const all = readDocuments();
   const idx = all.findIndex((d) => d.id === id);
   if (idx === -1) return undefined;
@@ -196,9 +192,7 @@ export function updateDocument(
     ...(patch.ceco !== undefined ? { ceco: patch.ceco } : {}),
     ...(patch.extracted !== undefined ? { extracted: patch.extracted } : {}),
     ...(patch.duplicateOf !== undefined ? { duplicateOf: patch.duplicateOf } : {}),
-    ...(patch.duplicateReason !== undefined
-      ? { duplicateReason: patch.duplicateReason }
-      : {}),
+    ...(patch.duplicateReason !== undefined ? { duplicateReason: patch.duplicateReason } : {}),
   };
   all[idx] = next;
   writeDocuments(all);
@@ -216,10 +210,7 @@ export function deleteDocument(id: string): void {
   recomputeAllDuplicates();
 }
 
-export function setDocumentCeco(
-  id: string,
-  ceco: string,
-): DocumentRecord | undefined {
+export function setDocumentCeco(id: string, ceco: string): DocumentRecord | undefined {
   const all = readDocuments();
   const idx = all.findIndex((d) => d.id === id);
   if (idx === -1) return undefined;
@@ -258,9 +249,7 @@ export const PROPINA_MAX_RATE = 0.1;
 
 /** Tope absoluto de propina para un totalFactura dado (incluye IVA). */
 export function propinaCap(totalFactura: string | number): number {
-  const total = typeof totalFactura === "number"
-    ? totalFactura
-    : parseAmount(totalFactura);
+  const total = typeof totalFactura === "number" ? totalFactura : parseAmount(totalFactura);
   return total * PROPINA_MAX_RATE;
 }
 
@@ -308,9 +297,7 @@ export function validatePropina(
 export function listLegalizations(): Legalization[] {
   return readLegalizations()
     .slice()
-    .sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export function getLegalization(id: string): Legalization | undefined {
@@ -386,9 +373,7 @@ export function addExpenseToLegalization(
   return next;
 }
 
-export function submitLegalization(
-  id: string,
-): Legalization | undefined {
+export function submitLegalization(id: string): Legalization | undefined {
   const all = readLegalizations();
   const idx = all.findIndex((l) => l.id === id);
   if (idx === -1) return undefined;
@@ -419,9 +404,7 @@ export function getLegalizationTotal(id: string): number {
   return total;
 }
 
-export function findLegalizationContainingDoc(
-  docId: string,
-): Legalization | undefined {
+export function findLegalizationContainingDoc(docId: string): Legalization | undefined {
   return listLegalizations().find((l) => l.expenseIds.includes(docId));
 }
 
@@ -452,9 +435,7 @@ function bucketDocsByKey(docs: DocumentRecord[]): Map<string, string[]> {
   return buckets;
 }
 
-function pairwiseDuplicates(
-  buckets: Map<string, string[]>,
-): Map<string, string[]> {
+function pairwiseDuplicates(buckets: Map<string, string[]>): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const ids of buckets.values()) {
     if (ids.length < 2) continue;
@@ -466,9 +447,7 @@ function pairwiseDuplicates(
   return out;
 }
 
-export function findDuplicatesWithinLegalization(
-  legalizationId: string,
-): Map<string, string[]> {
+export function findDuplicatesWithinLegalization(legalizationId: string): Map<string, string[]> {
   const leg = getLegalization(legalizationId);
   if (!leg) return new Map();
   const docs: DocumentRecord[] = [];
@@ -479,9 +458,7 @@ export function findDuplicatesWithinLegalization(
   return pairwiseDuplicates(bucketDocsByKey(docs));
 }
 
-export function findDuplicatesAgainstHistory(
-  legalizationId: string,
-): Map<string, string[]> {
+export function findDuplicatesAgainstHistory(legalizationId: string): Map<string, string[]> {
   const target = getLegalization(legalizationId);
   if (!target) return new Map();
   const targetDocs: DocumentRecord[] = [];
@@ -522,10 +499,7 @@ export function getBlockingDuplicates(legalizationId: string): string[] {
   return Array.from(out);
 }
 
-function sameStringSet(
-  a: string[] | undefined,
-  b: string[] | undefined,
-): boolean {
+function sameStringSet(a: string[] | undefined, b: string[] | undefined): boolean {
   const aa = a ?? [];
   const bb = b ?? [];
   if (aa.length !== bb.length) return false;

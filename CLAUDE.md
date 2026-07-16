@@ -16,6 +16,7 @@ para generar estáticos desde un CMS (Contentful, etc.).
 ## Reglas innegociables
 
 ### Arquitectura — organiza por dominio, no por tipo técnico
+
 - **Funcionalidad nueva ⇒ nueva feature** en `src/features/<dominio>/`. NO pongas
   lógica de dominio en `App.tsx` ni en `shared/`. `App.tsx` solo monta el router.
 - **Nombra la feature por su dominio, no por su forma de UI.** Evita `dashboard`/`home`
@@ -37,6 +38,7 @@ para generar estáticos desde un CMS (Contentful, etc.).
 - El `*.test.tsx` va **junto** al archivo que prueba.
 
 ### Ruteo (SPA)
+
 - `react-router-dom` con `createBrowserRouter` en `src/routes/`.
 - Navegación **siempre cliente**: `useNavigate`/`<Link>`/`<NavLink>`. Si un componente
   de la librería (p. ej. `Sidebar`) usaría `href`, recargaría la página; para SPA
@@ -46,6 +48,7 @@ para generar estáticos desde un CMS (Contentful, etc.).
   y registrarla como ruta en `src/routes/`.
 
 ### Sistema de Diseño — este es un proyecto IMPLEMENTADOR
+
 - Importa desde el paquete npm: `import { Button } from '@comfama/comfama-ui-react'`.
   NUNCA uses el alias interno `@/main` (ese es solo para desarrollo de la librería).
 - **Tailwind SIN prefijo** `cfm:`. Clases nativas: `flex`, `p-4`, `bg-primary-50`.
@@ -58,6 +61,7 @@ para generar estáticos desde un CMS (Contentful, etc.).
 - No inventes props: los componentes están fuertemente tipados; respeta el contrato.
 
 ### Antes de usar componentes de la librería — consulta los skills (obligatorio)
+
 - `01-cfm-design-tokens` — tokens, colores, radius, breakpoints, reglas de Tailwind.
 - `02-cfm-atoms-registry` — átomos (Button, Chip, Typography, Alert, inputs...).
 - `03-cfm-component-registry` — ensamblajes (Sidebar, DataTable, AuthWidget, Modal...).

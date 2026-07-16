@@ -58,11 +58,7 @@ type Group = "Hoy" | "Esta semana" | "Anterior";
 
 function iconForType(type: string) {
   if (type.startsWith("image/")) return LuFileImage;
-  if (
-    type.includes("spreadsheet") ||
-    type.includes("excel") ||
-    type === "text/csv"
-  )
+  if (type.includes("spreadsheet") || type.includes("excel") || type === "text/csv")
     return LuFileSpreadsheet;
   if (type.includes("pdf") || type.includes("text")) return LuFileText;
   return LuFile;
@@ -138,9 +134,7 @@ const MePageInner = () => {
 
   const [docs, setDocs] = useState<DocumentRecord[]>(() => listDocuments());
   const [role, setRoleState] = useState<Role>(() => getRole());
-  const [active, setActive] = useState<Legalization | undefined>(() =>
-    getActiveLegalization(),
-  );
+  const [active, setActive] = useState<Legalization | undefined>(() => getActiveLegalization());
   const [submitted, setSubmitted] = useState<Legalization[]>(() =>
     listLegalizations().filter((l) => l.status === "submitted"),
   );
@@ -156,9 +150,7 @@ const MePageInner = () => {
       setDocs(listDocuments());
       setRoleState(getRole());
       setActive(getActiveLegalization());
-      setSubmitted(
-        listLegalizations().filter((l) => l.status === "submitted"),
-      );
+      setSubmitted(listLegalizations().filter((l) => l.status === "submitted"));
     });
     return () => {
       unsubscribe();
@@ -221,14 +213,10 @@ const MePageInner = () => {
   const confirmedCount = useMemo(() => {
     if (!draft) return 0;
     const inActive = new Set(draft.expenseIds);
-    return docs.filter((d) => inActive.has(d.id) && d.status === "processing")
-      .length;
+    return docs.filter((d) => inActive.has(d.id) && d.status === "processing").length;
   }, [docs, draft]);
 
-  const blockingDuplicates = useMemo(
-    () => (draft ? getBlockingDuplicates(draft.id) : []),
-    [draft],
-  );
+  const blockingDuplicates = useMemo(() => (draft ? getBlockingDuplicates(draft.id) : []), [draft]);
 
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -254,8 +242,7 @@ const MePageInner = () => {
       toast({
         type: "warning",
         title: "Hay gastos duplicados",
-        description:
-          "No se puede enviar la legalización mientras existan facturas duplicadas.",
+        description: "No se puede enviar la legalización mientras existan facturas duplicadas.",
         showIcon: true,
         showCloseButton: true,
       });
@@ -295,9 +282,7 @@ const MePageInner = () => {
                   </Typography>
                   <Typography variant="h2" className="text-secondary-900 mt-1">
                     {USER_NAME.split(" ")[0]}{" "}
-                    <span className="font-bold">
-                      {USER_NAME.split(" ").slice(1).join(" ")}
-                    </span>
+                    <span className="font-bold">{USER_NAME.split(" ").slice(1).join(" ")}</span>
                   </Typography>
                   <Typography
                     variant="body2"
@@ -308,11 +293,7 @@ const MePageInner = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button
-                  variant="outlined"
-                  action={() => undefined}
-                  className="px-4"
-                >
+                <Button variant="outlined" action={() => undefined} className="px-4">
                   <LuArrowLeft className="w-4 h-4 mr-2" />
                   Volver
                 </Button>
@@ -359,9 +340,7 @@ const MePageInner = () => {
             />
           </section>
 
-          {submitted.length > 0 ? (
-            <SubmittedLegalizationsList items={submitted} />
-          ) : null}
+          {submitted.length > 0 ? <SubmittedLegalizationsList items={submitted} /> : null}
 
           <section className="space-y-8">
             {visibleDocs.length === 0 ? (
@@ -372,12 +351,8 @@ const MePageInner = () => {
                 <Typography variant="h3" className="text-secondary-900">
                   Aún no tenés <span className="font-bold">documentos</span>
                 </Typography>
-                <Typography
-                  variant="body2"
-                  className="text-secondary-600 max-w-md mx-auto"
-                >
-                  Subí tu primera factura o remito para empezar a gestionarlos
-                  desde acá.
+                <Typography variant="body2" className="text-secondary-600 max-w-md mx-auto">
+                  Subí tu primera factura o remito para empezar a gestionarlos desde acá.
                 </Typography>
                 <Link to="/upload" className="inline-block">
                   <Button action={() => undefined}>
@@ -441,8 +416,7 @@ const MePageInner = () => {
                                     {doc.fileName}
                                   </p>
                                   <p className="text-xs text-secondary-600 mt-1 sm:hidden">
-                                    {formatDate(doc.uploadedAt)} ·{" "}
-                                    {formatTime(doc.uploadedAt)}
+                                    {formatDate(doc.uploadedAt)} · {formatTime(doc.uploadedAt)}
                                   </p>
                                 </div>
                               </div>
@@ -458,17 +432,13 @@ const MePageInner = () => {
                                 <span className="sm:hidden text-xs font-bold uppercase tracking-widest text-secondary-600 mr-2">
                                   NIT
                                 </span>
-                                <span className="font-mono text-secondary-900">
-                                  {nit}
-                                </span>
+                                <span className="font-mono text-secondary-900">{nit}</span>
                                 {doc.ceco ? (
                                   <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-secondary-600">
                                     <span className="sm:hidden">CECO</span>
                                     <span
                                       className={`font-mono normal-case tracking-normal ${
-                                        doc.ceco
-                                          ? "text-secondary-900"
-                                          : "text-secondary-600"
+                                        doc.ceco ? "text-secondary-900" : "text-secondary-600"
                                       }`}
                                     >
                                       {doc.ceco}
@@ -481,16 +451,11 @@ const MePageInner = () => {
                                 <span className="sm:hidden text-xs font-bold uppercase tracking-widest text-secondary-600 mr-2">
                                   Valor
                                 </span>
-                                <span className="font-mono text-secondary-900">
-                                  {valor}
-                                </span>
+                                <span className="font-mono text-secondary-900">{valor}</span>
                               </div>
 
                               <div className="flex items-center gap-2 sm:justify-end flex-wrap sm:flex-nowrap">
-                                <Chip
-                                  color={STATUS_COLOR[doc.status]}
-                                  hoverable={false}
-                                >
+                                <Chip color={STATUS_COLOR[doc.status]} hoverable={false}>
                                   {STATUS_LABEL[doc.status]}
                                 </Chip>
                                 {doc.duplicateOf && doc.duplicateOf.length > 0 ? (
@@ -518,9 +483,7 @@ const MePageInner = () => {
                                   variant="ghost"
                                   isIcon
                                   size="sm"
-                                  aria-label={
-                                    isExpanded ? "Ocultar detalle" : "Ver detalle"
-                                  }
+                                  aria-label={isExpanded ? "Ocultar detalle" : "Ver detalle"}
                                   action={() => toggleExpanded(doc.id)}
                                 >
                                   {isExpanded ? (
@@ -620,10 +583,7 @@ const Preview = ({ doc }: { doc: DocumentRecord }) => {
     return (
       <div className="pt-4 flex items-start gap-3 text-xs text-secondary-600">
         <LuCircleAlert className="w-4 h-4 mt-0.5 flex-shrink-0" />
-        <p>
-          Este documento aún no tiene datos extraídos. Abrilo en revisión para
-          procesarlo.
-        </p>
+        <p>Este documento aún no tiene datos extraídos. Abrilo en revisión para procesarlo.</p>
       </div>
     );
   }
@@ -632,12 +592,7 @@ const Preview = ({ doc }: { doc: DocumentRecord }) => {
   return (
     <div className="pt-4 space-y-4">
       {duplicateMessage ? (
-        <Alert
-          variant="filled"
-          type="warning"
-          title={duplicateMessage}
-          showIcon
-        />
+        <Alert variant="filled" type="warning" title={duplicateMessage} showIcon />
       ) : null}
       <InvoicePreview fields={e} fileName={doc.fileName} />
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
@@ -676,12 +631,8 @@ const PreviewRow = ({
   mono?: boolean;
 }) => (
   <div className="flex flex-col">
-    <dt className="text-xs font-bold text-secondary-600 uppercase tracking-widest">
-      {label}
-    </dt>
-    <dd className={`mt-1 text-secondary-900 ${mono ? "font-mono" : ""}`}>
-      {value}
-    </dd>
+    <dt className="text-xs font-bold text-secondary-600 uppercase tracking-widest">{label}</dt>
+    <dd className={`mt-1 text-secondary-900 ${mono ? "font-mono" : ""}`}>{value}</dd>
   </div>
 );
 
@@ -707,10 +658,7 @@ const ActiveLegalizationCard = ({
     <section className="relative overflow-hidden rounded-2xl border border-secondary-400 bg-white p-6 sm:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <Typography
-            variant="body2"
-            className="text-primary uppercase tracking-widest font-bold"
-          >
+          <Typography variant="body2" className="text-primary uppercase tracking-widest font-bold">
             Legalización activa
           </Typography>
           <Typography variant="h2" className="text-secondary-900 mt-1">
@@ -726,16 +674,10 @@ const ActiveLegalizationCard = ({
         >
           Total consolidado
         </Typography>
-        <Typography
-          variant="h1"
-          className="text-secondary-900 mt-2 font-light"
-        >
+        <Typography variant="h1" className="text-secondary-900 mt-2 font-light">
           {formatCurrencyARS(total)}
         </Typography>
-        <Typography
-          variant="body2"
-          className="text-secondary-600 mt-2"
-        >
+        <Typography variant="body2" className="text-secondary-600 mt-2">
           {caption}
         </Typography>
       </div>
@@ -750,22 +692,14 @@ const ActiveLegalizationCard = ({
           />
         </div>
       ) : null}
-      <Button
-        disabled={!canSubmit}
-        className="mt-6 w-full"
-        action={onSubmit}
-      >
+      <Button disabled={!canSubmit} className="mt-6 w-full" action={onSubmit}>
         Enviar a aprobación
       </Button>
     </section>
   );
 };
 
-const LegalizationStatusChip = ({
-  status,
-}: {
-  status: LegalizationStatus;
-}) =>
+const LegalizationStatusChip = ({ status }: { status: LegalizationStatus }) =>
   status === "draft" ? (
     <Chip color="warning" hoverable={false}>
       Borrador
@@ -782,13 +716,9 @@ const EmptyLegalizationCard = () => (
       <LuUpload className="w-7 h-7" />
     </div>
     <Typography variant="h3" className="text-secondary-900">
-      Aún no tenés una{" "}
-      <span className="font-bold">legalización activa</span>
+      Aún no tenés una <span className="font-bold">legalización activa</span>
     </Typography>
-    <Typography
-      variant="body2"
-      className="text-secondary-600 max-w-md mx-auto"
-    >
+    <Typography variant="body2" className="text-secondary-600 max-w-md mx-auto">
       Subí tu primera factura para iniciar una nueva legalización.
     </Typography>
     <Link to="/upload" className="inline-block">
@@ -825,9 +755,7 @@ const SubmittedLegalizationsList = ({ items }: { items: Legalization[] }) => {
           Legalizaciones enviadas
         </Typography>
         <div className="h-px flex-1 bg-secondary-400" />
-        <span className="text-xs font-semibold text-secondary-600">
-          {sorted.length}
-        </span>
+        <span className="text-xs font-semibold text-secondary-600">{sorted.length}</span>
       </div>
       <ul className="space-y-3">
         {sorted.map((l) => {
@@ -839,9 +767,7 @@ const SubmittedLegalizationsList = ({ items }: { items: Legalization[] }) => {
               className="rounded-2xl border border-secondary-400 bg-white p-4 sm:p-5 flex items-center gap-4"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-secondary-900 truncate">
-                  {l.period}
-                </p>
+                <p className="text-sm font-semibold text-secondary-900 truncate">{l.period}</p>
                 <p className="text-xs text-secondary-600 mt-1">
                   {formatDate(submittedAt)} · {formatTime(submittedAt)}
                 </p>

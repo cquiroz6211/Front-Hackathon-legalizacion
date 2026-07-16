@@ -13,19 +13,9 @@ import {
   LuZoomOut,
 } from "react-icons/lu";
 
-import {
-  Alert,
-  Button,
-  DateField,
-  Input,
-  Typography,
-} from "@comfama/comfama-ui-react";
+import { Alert, Button, DateField, Input, Typography } from "@comfama/comfama-ui-react";
 
-import {
-  getDocument,
-  updateDocument,
-  validatePropina,
-} from "./lib/store";
+import { getDocument, updateDocument, validatePropina } from "./lib/store";
 import type { DocumentRecord, ExtractedFields } from "./types/document";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
@@ -135,10 +125,7 @@ const ReviewPageInner = () => {
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const updateField = <K extends keyof ExtractedFields>(
-    key: K,
-    value: ExtractedFields[K],
-  ) => {
+  const updateField = <K extends keyof ExtractedFields>(key: K, value: ExtractedFields[K]) => {
     setFields((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -188,22 +175,10 @@ const ReviewPageInner = () => {
               >
                 <LuZoomIn className="w-4 h-4 text-secondary-600" />
               </Button>
-              <Button
-                variant="ghost"
-                isIcon
-                size="sm"
-                aria-label="Alejar"
-                action={() => undefined}
-              >
+              <Button variant="ghost" isIcon size="sm" aria-label="Alejar" action={() => undefined}>
                 <LuZoomOut className="w-4 h-4 text-secondary-600" />
               </Button>
-              <Button
-                variant="ghost"
-                isIcon
-                size="sm"
-                aria-label="Rotar"
-                action={() => undefined}
-              >
+              <Button variant="ghost" isIcon size="sm" aria-label="Rotar" action={() => undefined}>
                 <LuRotateCw className="w-4 h-4 text-secondary-600" />
               </Button>
             </div>
@@ -222,15 +197,11 @@ const ReviewPageInner = () => {
               </Typography>
             </div>
             <Typography variant="body2" className="text-secondary-600">
-              Verifique la información extraída automáticamente antes de
-              confirmar.
+              Verifique la información extraída automáticamente antes de confirmar.
             </Typography>
           </header>
 
-          <form
-            className="flex-1 p-6 space-y-6"
-            onSubmit={(e) => e.preventDefault()}
-          >
+          <form className="flex-1 p-6 space-y-6" onSubmit={(e) => e.preventDefault()}>
             <div className="space-y-4 relative z-10">
               <Typography
                 variant="body2"
@@ -241,15 +212,8 @@ const ReviewPageInner = () => {
               <div className="grid grid-cols-2 gap-4">
                 <DateField
                   label={FIELD_LABELS.fecha}
-                  value={
-                    fields.fecha ? new Date(`${fields.fecha}T00:00:00`) : undefined
-                  }
-                  onChange={(d) =>
-                    updateField(
-                      "fecha",
-                      d ? d.toISOString().slice(0, 10) : "",
-                    )
-                  }
+                  value={fields.fecha ? new Date(`${fields.fecha}T00:00:00`) : undefined}
+                  onChange={(d) => updateField("fecha", d ? d.toISOString().slice(0, 10) : "")}
                   enableMonth
                   enableYear
                   enableDay
@@ -355,19 +319,14 @@ const ReviewPageInner = () => {
                 label={FIELD_LABELS.propina}
                 value={fields.propina}
                 onChange={(e) => updateField("propina", e.target.value)}
-                colorScheme={
-                  propinaValidation.isValid ? "default" : "error"
-                }
+                colorScheme={propinaValidation.isValid ? "default" : "error"}
                 helperText={
                   propinaValidation.message ??
-                  `Tope permitido: 10% del total factura (${new Intl.NumberFormat(
-                    "es-CO",
-                    {
-                      style: "currency",
-                      currency: "COP",
-                      maximumFractionDigits: 0,
-                    },
-                  ).format(propinaValidation.max)}).`
+                  `Tope permitido: 10% del total factura (${new Intl.NumberFormat("es-CO", {
+                    style: "currency",
+                    currency: "COP",
+                    maximumFractionDigits: 0,
+                  }).format(propinaValidation.max)}).`
                 }
                 className="font-mono text-sm"
               />
@@ -384,9 +343,7 @@ const ReviewPageInner = () => {
 
           <div className="p-6 bg-white border-t border-secondary-400 space-y-3 sticky bottom-0 relative z-10">
             <Button
-              disabled={
-                isProcessing || isConfirmed || !propinaValidation.isValid
-              }
+              disabled={isProcessing || isConfirmed || !propinaValidation.isValid}
               variant={isConfirmed ? "outlined" : "contained"}
               className="w-full"
               action={handleConfirm}
@@ -408,11 +365,7 @@ const ReviewPageInner = () => {
                 </>
               )}
             </Button>
-            <Button
-              variant="outlined"
-              className="w-full"
-              action={() => navigate("/upload")}
-            >
+            <Button variant="outlined" className="w-full" action={() => navigate("/upload")}>
               <LuFileUp className="w-4 h-4 mr-2" />
               Subir otro documento
             </Button>
@@ -428,10 +381,7 @@ interface IvaRowProps {
   baseKey: "iva19Base" | "iva5Base" | "iva0Base";
   valorKey: "iva19Valor" | "iva5Valor" | "iva0Valor";
   fields: ExtractedFields;
-  onChange: <K extends keyof ExtractedFields>(
-    key: K,
-    value: ExtractedFields[K],
-  ) => void;
+  onChange: <K extends keyof ExtractedFields>(key: K, value: ExtractedFields[K]) => void;
 }
 
 const IvaRow = ({ title, baseKey, valorKey, fields, onChange }: IvaRowProps) => (

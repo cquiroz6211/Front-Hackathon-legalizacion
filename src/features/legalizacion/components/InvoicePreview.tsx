@@ -77,9 +77,7 @@ export const InvoicePreview = ({ fields, fileName }: InvoicePreviewProps) => {
           </div>
         </div>
 
-        {fileName ? (
-          <p className="text-xs text-secondary-600 truncate">{fileName}</p>
-        ) : null}
+        {fileName ? <p className="text-xs text-secondary-600 truncate">{fileName}</p> : null}
       </div>
     </div>
   );
