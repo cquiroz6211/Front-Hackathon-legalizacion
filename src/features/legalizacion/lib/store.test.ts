@@ -4,6 +4,7 @@ import {
   addDocument,
   addExpenseToLegalization,
   approveByLeader,
+  approveLegalization,
   businessDaysBetween,
   canSubmitToGestorSap,
   CONSUMPTION_LIMIT,
@@ -13,6 +14,7 @@ import {
   getActiveLegalization,
   getBlockingDuplicates,
   getDocument,
+  getGestorDecision,
   getLegalization,
   getLegalizationAnticipo,
   getLegalizationConsumoDate,
@@ -25,10 +27,12 @@ import {
   isLeaderApproved,
   listDocuments,
   listLegalizations,
+  listLegalizationsForGestor,
   parseAmount,
   PROPINA_MAX_RATE,
   propinaCap,
   recomputeAllDuplicates,
+  rejectLegalization,
   requiresLeaderApproval,
   submitLegalization,
   updateDocument,
@@ -817,5 +821,162 @@ describe("HU-0011 — submitLegalization respeta aprobación del líder y audita
 
     expect(submitLegalization("leg-dup")).toBeUndefined();
     expect(getLegalization("leg-dup")?.status).toBe("draft");
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * HU-0011 (lado Gestor SAP) — bandeja, aprobación y rechazo
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe("HU-0011 — listLegalizationsForGestor (bandeja del gestor)", () => {
+  it("devuelve solo las enviadas (submitted), excluyendo draft/approved/rejected", () => {
+    seedLegalizationRaw({ id: "leg-draft", status: "draft" });
+    seedLegalizationRaw({
+      id: "leg-sub-1",
+      status: "submitted",
+      createdAt: "2024-03-10T00:00:00.000Z",
+      submittedAt: "2024-03-12T00:00:00.000Z",
+    });
+    seedLegalizationRaw({
+      id: "leg-sub-2",
+      status: "submitted",
+      createdAt: "2024-03-01T00:00:00.000Z",
+      submittedAt: "2024-03-15T00:00:00.000Z",
+    });
+    seedLegalizationRaw({ id: "leg-aprobada", status: "approved" });
+    seedLegalizationRaw({ id: "leg-rechazada", status: "rejected" });
+
+    const pending = listLegalizationsForGestor();
+    expect(pending.map((l) => l.id).sort()).toEqual(["leg-sub-1", "leg-sub-2"]);
+  });
+
+  it("ordena por submittedAt descendente (la más reciente primero)", () => {
+    seedLegalizationRaw({
+      id: "leg-vieja",
+      status: "submitted",
+      submittedAt: "2024-03-01T00:00:00.000Z",
+    });
+    seedLegalizationRaw({
+      id: "leg-nueva",
+      status: "submitted",
+      submittedAt: "2024-03-15T00:00:00.000Z",
+    });
+
+    const pending = listLegalizationsForGestor();
+    expect(pending.map((l) => l.id)).toEqual(["leg-nueva", "leg-vieja"]);
+  });
+
+  it("usa createdAt como fallback cuando submittedAt falta", () => {
+    seedLegalizationRaw({
+      id: "leg-sin-submit-at",
+      status: "submitted",
+      createdAt: "2024-03-20T00:00:00.000Z",
+    });
+    const pending = listLegalizationsForGestor();
+    expect(pending.map((l) => l.id)).toEqual(["leg-sin-submit-at"]);
+  });
+
+  it("devuelve un arreglo vacío (copia) cuando no hay pendientes", () => {
+    seedLegalizationRaw({ id: "leg-draft", status: "draft" });
+    const pending = listLegalizationsForGestor();
+    expect(pending).toEqual([]);
+  });
+});
+
+describe("HU-0011 — approveLegalization (gestor aprueba)", () => {
+  it("cambia el estado a approved, registra gestorDecision y audita", () => {
+    seedLegalizationRaw({
+      id: "leg-pend",
+      status: "submitted",
+      submittedAt: "2024-03-12T00:00:00.000Z",
+    });
+
+    const result = approveLegalization("leg-pend", "gestor.demo");
+    expect(result?.status).toBe("approved");
+    expect(result?.gestorDecision?.decision).toBe("approved");
+    expect(result?.gestorDecision?.gestor).toBe("gestor.demo");
+    expect(result?.gestorDecision?.at).toBeDefined();
+
+    const persisted = getLegalization("leg-pend");
+    expect(persisted?.status).toBe("approved");
+    expect(persisted?.gestorDecision?.decision).toBe("approved");
+
+    const approveEvent = persisted?.auditLog?.find((e) => e.toStatus === "approved");
+    expect(approveEvent).toBeDefined();
+    expect(approveEvent?.fromStatus).toBe("submitted");
+    expect(approveEvent?.reason).toMatch(/gestor-approval/);
+    expect(approveEvent?.actor).toBe("gestor.demo");
+  });
+
+  it("getGestorDecision devuelve la decisión registrada", () => {
+    seedLegalizationRaw({ id: "leg-x", status: "submitted" });
+    approveLegalization("leg-x", "gestor.demo");
+    const decision = getGestorDecision("leg-x");
+    expect(decision?.decision).toBe("approved");
+    expect(decision?.gestor).toBe("gestor.demo");
+  });
+
+  it("no muta y devuelve undefined si la legalización no está pendiente", () => {
+    seedLegalizationRaw({ id: "leg-draft", status: "draft" });
+    expect(approveLegalization("leg-draft", "gestor.demo")).toBeUndefined();
+    expect(getLegalization("leg-draft")?.status).toBe("draft");
+    expect(getLegalization("leg-draft")?.gestorDecision).toBeUndefined();
+  });
+
+  it("no muta y devuelve undefined si el id no existe", () => {
+    expect(approveLegalization("no-existe", "gestor.demo")).toBeUndefined();
+  });
+
+  it("saca la legalización de la bandeja del gestor tras aprobar", () => {
+    seedLegalizationRaw({ id: "leg-pend", status: "submitted" });
+    approveLegalization("leg-pend", "gestor.demo");
+    expect(listLegalizationsForGestor().map((l) => l.id)).not.toContain("leg-pend");
+  });
+});
+
+describe("HU-0011 — rejectLegalization (gestor rechaza)", () => {
+  it("requiere motivo: reason vacío no muta y devuelve undefined", () => {
+    seedLegalizationRaw({ id: "leg-pend", status: "submitted" });
+    expect(rejectLegalization("leg-pend", "gestor.demo", "")).toBeUndefined();
+    expect(rejectLegalization("leg-pend", "gestor.demo", "   ")).toBeUndefined();
+    expect(getLegalization("leg-pend")?.status).toBe("submitted");
+    expect(getLegalization("leg-pend")?.gestorDecision).toBeUndefined();
+  });
+
+  it("cambia el estado a rejected, registra gestorDecision con motivo y audita", () => {
+    seedLegalizationRaw({ id: "leg-pend", status: "submitted" });
+    const motivo = "Falta soporte de la factura";
+
+    const result = rejectLegalization("leg-pend", "gestor.demo", motivo);
+    expect(result?.status).toBe("rejected");
+    expect(result?.gestorDecision?.decision).toBe("rejected");
+    expect(result?.gestorDecision?.reason).toBe(motivo);
+    expect(result?.gestorDecision?.gestor).toBe("gestor.demo");
+
+    const persisted = getLegalization("leg-pend");
+    expect(persisted?.status).toBe("rejected");
+
+    const rejectEvent = persisted?.auditLog?.find((e) => e.toStatus === "rejected");
+    expect(rejectEvent).toBeDefined();
+    expect(rejectEvent?.fromStatus).toBe("submitted");
+    expect(rejectEvent?.actor).toBe("gestor.demo");
+    expect(rejectEvent?.reason).toContain("gestor-rejection");
+    expect(rejectEvent?.reason).toContain(motivo);
+  });
+
+  it("no muta y devuelve undefined si no está pendiente", () => {
+    seedLegalizationRaw({ id: "leg-draft", status: "draft" });
+    expect(rejectLegalization("leg-draft", "gestor.demo", "motivo")).toBeUndefined();
+    expect(getLegalization("leg-draft")?.status).toBe("draft");
+  });
+
+  it("no muta y devuelve undefined si el id no existe", () => {
+    expect(rejectLegalization("no-existe", "gestor.demo", "motivo")).toBeUndefined();
+  });
+
+  it("saca la legalización de la bandeja del gestor tras rechazar", () => {
+    seedLegalizationRaw({ id: "leg-pend", status: "submitted" });
+    rejectLegalization("leg-pend", "gestor.demo", "mal");
+    expect(listLegalizationsForGestor().map((l) => l.id)).not.toContain("leg-pend");
   });
 });
