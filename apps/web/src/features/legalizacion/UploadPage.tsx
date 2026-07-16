@@ -56,14 +56,52 @@ export const UploadPage = () => {
           setCecosError(res.error ?? "No se pudieron cargar los centros de costo.");
           return;
         }
-        const options = res.cecos
+        interface RawCecoOption {
+          value: string;
+          label: string;
+          dateto: string;
+          langu: string;
+        }
+
+        const rawOptions: RawCecoOption[] = res.cecos
           .map((raw) => {
             const c = raw as Record<string, unknown>;
             const code = String(c.kostl ?? "").trim();
+            const cleanCode = code.replace(/^0+/, "");
             const desc = String(c.txtmd ?? c.txtsh ?? c.txtmc ?? "").trim();
-            return { value: code, label: desc ? `${code} — ${desc}` : code };
+            const dateto = String(c.dateto ?? "").trim();
+            const langu = String(c.langu ?? "").trim();
+            return {
+              value: code,
+              label: desc ? `${cleanCode} — ${desc}` : cleanCode,
+              dateto,
+              langu,
+            };
           })
           .filter((option) => option.value !== "");
+
+        // Desduplica por código de CECO para evitar claves duplicadas en React
+        const uniqueOptionsMap = new Map<string, RawCecoOption>();
+        for (const opt of rawOptions) {
+          const existing = uniqueOptionsMap.get(opt.value);
+          if (!existing) {
+            uniqueOptionsMap.set(opt.value, opt);
+          } else {
+            // Prioriza registros vigentes ('9999-12-31') y preferiblemente en español ('S')
+            const isOptBetter =
+              (opt.dateto === "9999-12-31" && existing.dateto !== "9999-12-31") ||
+              (opt.dateto === "9999-12-31" && opt.langu === "S" && existing.langu !== "S");
+            if (isOptBetter) {
+              uniqueOptionsMap.set(opt.value, opt);
+            }
+          }
+        }
+
+        const options = Array.from(uniqueOptionsMap.values()).map((o) => ({
+          value: o.value,
+          label: o.label,
+        }));
+
         setCecoOptions(options);
       })
       .catch((error: unknown) => {
