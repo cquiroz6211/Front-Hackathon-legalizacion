@@ -596,3 +596,105 @@ export function recomputeAllDuplicates(): void {
     recomputeDuplicatesForLegalization(l.id);
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * HU-0010 — Historial de gastos con filtro por fecha
+ *
+ * Decisiones de modelo (documentadas junto al código):
+ * - "Fecha de registro" = `submittedAt` si la legalización fue enviada; si no,
+ *   `createdAt` (cuando se creó el borrador).
+ * - "Fecha de consumo" = la `extracted.fecha` más temprana entre los documentos
+ *   de la legalización. El modelo NO tiene un campo explícito de consumo, así
+ *   que la fecha de emisión de la factura más antigua es el proxy. Si la
+ *   legalización no tiene documentos con fecha → null, y queda fuera de
+ *   cualquier filtro por consumo.
+ * - Helpers de SOLO LECTURA: no mutan la forma persistida en localStorage.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Normaliza un valor de fecha a su parte `yyyy-mm-dd`. Null si es inválida. */
+function toDateOnly(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const part = raw.slice(0, 10);
+  return DATE_ONLY_PATTERN.test(part) ? part : null;
+}
+
+/**
+ * Fecha de consumo (proxy HU-0010): la `extracted.fecha` más temprana entre los
+ * documentos de la legalización, en `yyyy-mm-dd`. Null si no hay documentos con
+ * fecha válida (queda fuera del filtro por consumo).
+ */
+export function getLegalizationConsumoDate(id: string): string | null {
+  const leg = getLegalization(id);
+  if (!leg) return null;
+  let earliest: string | null = null;
+  for (const docId of leg.expenseIds) {
+    const raw = getDocument(docId)?.extracted?.fecha;
+    const dateOnly = toDateOnly(raw);
+    if (!dateOnly) continue;
+    if (earliest === null || dateOnly < earliest) earliest = dateOnly;
+  }
+  return earliest;
+}
+
+/**
+ * Fecha de registro (HU-0010): `submittedAt ?? createdAt`, en `yyyy-mm-dd`.
+ * El borrador no tiene `submittedAt`, así que usa `createdAt`.
+ */
+export function getLegalizationRegistroDate(id: string): string {
+  const leg = getLegalization(id);
+  const iso = leg?.submittedAt ?? leg?.createdAt;
+  return toDateOnly(iso) ?? new Date().toISOString().slice(0, 10);
+}
+
+export interface DateRangeFilter {
+  /** Inicio del rango inclusive, `yyyy-mm-dd`. */
+  from?: string;
+  /** Fin del rango inclusive, `yyyy-mm-dd`. */
+  to?: string;
+}
+
+export interface LegalizationDateFilters {
+  /** Rango de fechas de consumo. */
+  consumo?: DateRangeFilter;
+  /** Rango de fechas de registro. */
+  registro?: DateRangeFilter;
+}
+
+/**
+ * Filtra legalizaciones por rangos de fecha (HU-0010). Rangos inclusivos en
+ * ambos extremos; `from` y `to` son opcionales de forma independiente. El
+ * filtro de consumo excluye cualquier legalización sin fecha de consumo (null).
+ * Ambos filtros se combinan con AND. No muta la entrada.
+ */
+export function filterLegalizationsByDateRange(
+  items: Legalization[],
+  filters: LegalizationDateFilters,
+): Legalization[] {
+  const consumo = filters.consumo;
+  const registro = filters.registro;
+  const hasConsumo = Boolean(consumo?.from || consumo?.to);
+  const hasRegistro = Boolean(registro?.from || registro?.to);
+  if (!hasConsumo && !hasRegistro) return items.slice();
+
+  const cFrom = consumo?.from;
+  const cTo = consumo?.to;
+  const rFrom = registro?.from;
+  const rTo = registro?.to;
+
+  return items.filter((leg) => {
+    if (hasConsumo) {
+      const consumoDate = getLegalizationConsumoDate(leg.id);
+      if (consumoDate === null) return false;
+      if (cFrom && consumoDate < cFrom) return false;
+      if (cTo && consumoDate > cTo) return false;
+    }
+    if (hasRegistro) {
+      const registroDate = getLegalizationRegistroDate(leg.id);
+      if (rFrom && registroDate < rFrom) return false;
+      if (rTo && registroDate > rTo) return false;
+    }
+    return true;
+  });
+}

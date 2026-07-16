@@ -1,7 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import { AuthEntryRoute, AuthGuard } from "@/features/auth";
-import { MePage, ReviewPage, UploadPage } from "@/features/legalizacion";
+import { HistorialPage, MePage, ReviewPage, UploadPage } from "@/features/legalizacion";
 
 /**
  * Rutas internas de la SPA. Cada ruta declara su título en `handle` (tipado con
@@ -10,8 +10,8 @@ import { MePage, ReviewPage, UploadPage } from "@/features/legalizacion";
  *
  * Auth (hackatón):
  * - `/` y `/login` → `AuthEntryRoute` (login o redirect a `/upload`).
- * - `/me`, `/upload`, `/review` → protegidas por `AuthGuard`. Si no hay sesión
- *   activa, redirigen a `/login` con `state.from`.
+ * - `/me`, `/upload`, `/review`, `/history` → protegidas por `AuthGuard`. Si no
+ *   hay sesión activa, redirigen a `/login` con `state.from`.
  */
 export const router = createBrowserRouter([
   {
@@ -64,6 +64,18 @@ export const router = createBrowserRouter([
     handle: {
       title: "Revisión de datos",
       subtitle: "Validar información extraída",
+    },
+  },
+  {
+    path: "/history",
+    element: (
+      <AuthGuard>
+        <HistorialPage />
+      </AuthGuard>
+    ),
+    handle: {
+      title: "Historial de gastos",
+      subtitle: "Consulta y seguimiento de legalizaciones",
     },
   },
 ]);
