@@ -127,7 +127,7 @@ describe("HistorialPage (HU-0010)", () => {
     expect(screen.getByText("SOL-ALPHA001")).toBeInTheDocument();
     expect(screen.getByText("SOL-BRAVO002")).toBeInTheDocument();
     expect(screen.getByText("Borrador")).toBeInTheDocument();
-    expect(screen.getByText("En aprobación")).toBeInTheDocument();
+    expect(screen.getByText("En revisión Gestor SAP")).toBeInTheDocument();
   });
 
   it("E2: muestra el total de cada registro", () => {

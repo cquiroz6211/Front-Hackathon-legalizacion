@@ -9,6 +9,7 @@ import {
   LuFilter,
   LuHistory,
   LuInbox,
+  LuShieldCheck,
 } from "react-icons/lu";
 
 import { Alert, Button, Chip, DateField, Typography } from "@comfama/comfama-ui-react";
@@ -28,13 +29,14 @@ import type { DocumentRecord, Legalization, LegalizationStatus } from "./types/d
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 /**
- * Estados que el modelo conoce hoy (HU-0010). "Aprobado" y "Rechazado" aún no
- * existen en `LegalizationStatus`; se muestran en la leyenda solo como
- * referencia futura, sin inventar datos.
+ * Estados que el modelo conoce hoy (HU-0010/0011). "Aprobado" y "Rechazado" aún
+ * no existen en `LegalizationStatus`; se muestran en la leyenda solo como
+ * referencia futura, sin inventar datos. El estado `submitted` se reutiliza como
+ * equivalente de "En revisión Gestor SAP" para no romper datos legacy.
  */
 const STATUS_LABEL: Record<LegalizationStatus, string> = {
   draft: "Borrador",
-  submitted: "En aprobación",
+  submitted: "En revisión Gestor SAP",
 };
 
 const STATUS_COLOR: Record<LegalizationStatus, "warning" | "info"> = {
@@ -252,7 +254,7 @@ const HistorialPageInner = () => {
             variant="outline"
             type="info"
             title="Estados disponibles"
-            description="Hoy existen dos estados: Borrador y En aprobación. Los estados Aprobado y Rechazado aparecerán cuando se habilite el flujo de aprobación."
+            description="Hoy existen dos estados: Borrador y En revisión Gestor SAP. Los estados Aprobado y Rechazado aparecerán cuando se habilite el flujo de aprobación."
             showIcon
           />
 
@@ -348,6 +350,14 @@ const HistorialRow = ({ legalization, isExpanded, onToggle }: HistorialRowProps)
           <Chip color={STATUS_COLOR[legalization.status]} hoverable={false}>
             {STATUS_LABEL[legalization.status]}
           </Chip>
+          {legalization.leaderApproval ? (
+            <Chip color="success" hoverable={false}>
+              <span className="inline-flex items-center gap-1">
+                <LuShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                Aprobación líder
+              </span>
+            </Chip>
+          ) : null}
           <Button
             variant="ghost"
             isIcon

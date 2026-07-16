@@ -15,7 +15,7 @@ import {
 
 import { Alert, Button, DateField, Input, Typography } from "@comfama/comfama-ui-react";
 
-import { getDocument, updateDocument, validatePropina } from "./lib/store";
+import { CONSUMPTION_LIMIT, getDocument, parseAmount, updateDocument, validatePropina } from "./lib/store";
 import type { DocumentRecord, ExtractedFields } from "./types/document";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
@@ -121,6 +121,11 @@ const ReviewPageInner = () => {
   const propinaValidation = useMemo(
     () => validatePropina(fields.propina, fields.totalFactura),
     [fields.propina, fields.totalFactura],
+  );
+  // HU-0008 — exceso de límite de consumo (alerta NO bloqueante para confirmar).
+  const overLimit = useMemo(
+    () => parseAmount(fields.totalFactura) > CONSUMPTION_LIMIT,
+    [fields.totalFactura],
   );
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -339,6 +344,20 @@ const ReviewPageInner = () => {
               description="3 tarifas de IVA detectadas. NIT validado contra registro mercantil. Total y bases gravadas reconcilian con el documento."
               showIcon
             />
+
+            {overLimit ? (
+              <Alert
+                variant="filled"
+                type="warning"
+                title="Supera el límite de consumo"
+                description={`Esta factura supera el tope de ${new Intl.NumberFormat("es-CO", {
+                  style: "currency",
+                  currency: "COP",
+                  maximumFractionDigits: 0,
+                }).format(CONSUMPTION_LIMIT)}; quedará sujeta a aprobación del líder.`}
+                showIcon
+              />
+            ) : null}
           </form>
 
           <div className="p-6 bg-white border-t border-secondary-400 space-y-3 sticky bottom-0 relative z-10">
