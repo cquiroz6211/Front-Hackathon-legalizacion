@@ -879,8 +879,7 @@ export function approveByLeader(id: string): Legalization | undefined {
   const motives: string[] = [];
   if (req.excess) motives.push("excess");
   if (req.time) motives.push("time");
-  const reason =
-    motives.length > 0 ? `leader-approval:${motives.join(",")}` : "leader-approval";
+  const reason = motives.length > 0 ? `leader-approval:${motives.join(",")}` : "leader-approval";
   const next: Legalization = {
     ...current,
     leaderApproval: { approvedAt: at, excess: req.excess, time: req.time },
@@ -906,10 +905,7 @@ export interface SubmitToGestorSapResult {
  * tiempo. `can` = sin bloqueadores Y con al menos un gasto. `now` opcional para
  * tests deterministas.
  */
-export function canSubmitToGestorSap(
-  id: string,
-  now: Date = new Date(),
-): SubmitToGestorSapResult {
+export function canSubmitToGestorSap(id: string, now: Date = new Date()): SubmitToGestorSapResult {
   const blockers: string[] = [];
   const leg = getLegalization(id);
   if (getBlockingDuplicates(id).length > 0) blockers.push("duplicates");

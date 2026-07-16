@@ -1,0 +1,67 @@
+{
+  "name": "baseline-front-comfama",
+  "version": "0.0.0",
+  "private": true,
+  "description": "baseline-front-comfama",
+  "keywords": [
+    "gatsby"
+  ],
+  "author": "Plataformas Digitales",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:dev": "tsc -b && vite build --mode dev",
+    "build:qa": "tsc -b && vite build --mode qa",
+    "build:pdn": "tsc -b && vite build --mode pdn",
+    "preview": "vite preview",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:watch": "vitest --coverage --watch",
+    "test:junit": "vitest run --reporter=junit --reporter=default --outputFile=./coverage/junit.xml",
+    "test:lcov": "vitest run --coverage --reporter=lcov --reporter=text",
+    "test:sonar": "vitest run --coverage",
+    "test-junit": "npm run test:junit",
+    "test-lcov": "npm run test:lcov",
+    "test-sonar": "npm run test:sonar"
+  },
+  "dependencies": {
+    "@comfama/comfama-ui-react": "^0.2.7",
+    "@comfama/frontend-utils": "^0.0.19",
+    "@tailwindcss/vite": "^4.3.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.18.1",
+    "tailwindcss": "^4.3.1"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.9",
+    "jsdom": "^29.1.1",
+    "lefthook": "^2.1.9",
+    "oxfmt": "^0.55.0",
+    "oxlint": "^1.70.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

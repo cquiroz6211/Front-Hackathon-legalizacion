@@ -333,11 +333,7 @@ const MePageInner = () => {
           )}
 
           {draft ? (
-            <FinancialSummary
-              anticipo={anticipo}
-              gastos={gastos}
-              diferencia={diferencia}
-            />
+            <FinancialSummary anticipo={anticipo} gastos={gastos} diferencia={diferencia} />
           ) : null}
 
           {submitted.length > 0 ? <SubmittedLegalizationsList items={submitted} /> : null}
@@ -536,8 +532,7 @@ interface FinancialSummaryProps {
  * queda saldo a favor del anticipo (por devolver) o si hay monto a reembolsar.
  */
 const FinancialSummary = ({ anticipo, gastos, diferencia }: FinancialSummaryProps) => {
-  const state =
-    diferencia > 0 ? "aFavor" : diferencia < 0 ? "aReembolsar" : "cuadrado";
+  const state = diferencia > 0 ? "aFavor" : diferencia < 0 ? "aReembolsar" : "cuadrado";
 
   return (
     <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
