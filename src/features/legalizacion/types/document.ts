@@ -7,6 +7,20 @@ export type Role = "conductor" | "personal";
 
 export type LegalizationStatus = "draft" | "submitted";
 
+/**
+ * Evento de auditoría del ciclo de vida de una legalización (HU-0008/0009/0011).
+ * `at` es ISO 8601; `fromStatus`/`toStatus` registran la transición de estado;
+ * `reason` describe el motivo (p. ej. "submit-to-gestor-sap",
+ * "leader-approval:excess,time"); `actor` es quién disparó el evento.
+ */
+export interface AuditEvent {
+  at: string;
+  fromStatus?: LegalizationStatus;
+  toStatus: LegalizationStatus;
+  reason?: string;
+  actor?: string;
+}
+
 export interface Legalization {
   id: string;
   period: string;
@@ -21,6 +35,22 @@ export interface Legalization {
    * saldo por devolver o un monto a reembolsar.
    */
   anticipo: number;
+  /**
+   * Evidencia de la aprobación del líder (SIMULADA, sin backend ni rol líder).
+   * `excess`/`time` indican qué motivos cubre la aprobación (HU-0008 exceso de
+   * límite, HU-0009 fuera de tiempo). Opcional para no romper localStorage
+   * legacy: una legalización sin este campo aún no fue aprobada por el líder.
+   */
+  leaderApproval?: {
+    approvedAt: string;
+    excess: boolean;
+    time: boolean;
+  };
+  /**
+   * Historial de eventos del ciclo de vida (envío a Gestor SAP, aprobación del
+   * líder, etc.). Opcional para no romper localStorage legacy.
+   */
+  auditLog?: AuditEvent[];
 }
 
 /**

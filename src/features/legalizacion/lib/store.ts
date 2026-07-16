@@ -404,13 +404,25 @@ export function submitLegalization(id: string): Legalization | undefined {
   if (idx === -1) return undefined;
   const current = all[idx];
   if (current.status === "submitted") return current;
-  if (current.expenseIds.length === 0) return undefined;
-  const blocking = getBlockingDuplicates(id);
-  if (blocking.length > 0) return undefined;
+  // HU-0011: canSubmitToGestorSap reúne duplicados, aprobación del líder
+  // (exceso/tiempo) y el requisito de tener al menos un gasto.
+  const { can } = canSubmitToGestorSap(id);
+  if (!can) return undefined;
+  const at = new Date().toISOString();
   const next: Legalization = {
     ...current,
     status: "submitted",
-    submittedAt: new Date().toISOString(),
+    submittedAt: at,
+    auditLog: [
+      ...(current.auditLog ?? []),
+      {
+        at,
+        fromStatus: current.status,
+        toStatus: "submitted",
+        reason: "submit-to-gestor-sap",
+        actor: "user",
+      },
+    ],
   };
   all[idx] = next;
   writeLegalizations(all);
@@ -697,4 +709,214 @@ export function filterLegalizationsByDateRange(
     }
     return true;
   });
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * HU-0008 / HU-0009 / HU-0011 — límite de consumo, control de tiempo y
+ * flujo a Gestor SAP con aprobación del líder (SIMULADA, sin backend).
+ *
+ * Decisiones de modelo (documentadas junto al código):
+ * - El "líder" es un flag local: `leaderApproval` + un evento en `auditLog`.
+ *   No existe rol líder ni endpoint; es una simulación para el hackatón.
+ * - HU-0008: tope ÚNICO GLOBAL por factura (`CONSUMPTION_LIMIT`). Si el
+ *   `totalFactura` de un documento lo supera → exceso → requiere aprobación.
+ *   El guardado (draft) NUNCA se bloquea; solo el envío al Gestor SAP.
+ * - HU-0009: días hábiles = Lunes a Viernes (sin sábados, domingos ni
+ *   festivos). Fecha de consumo = `getLegalizationConsumoDate` (proxy existente).
+ *   > 5 días hábiles → fuera de tiempo → requiere aprobación.
+ * - HU-0011: reutilizamos el estado `submitted` como equivalente a
+ *   "En revisión Gestor SAP" para no romper datos legacy; el label en UI refleja
+ *   ese significado.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Tope ÚNICO GLOBAL de consumo por factura (HU-0008), en COP. Si el
+ * `totalFactura` de un documento supera este valor, la legalización queda con
+ * exceso y requiere aprobación del líder. Configurable: ajustar este valor para
+ * cambiar la política (en el futuro, leerlo del backend).
+ */
+export const CONSUMPTION_LIMIT = 500_000;
+
+/** Días hábiles máximos para legalizar sin incumplimiento (HU-0009). */
+export const LEGALIZATION_MAX_BUSINESS_DAYS = 5;
+
+export interface LegalizationExcess {
+  hasExcess: boolean;
+  exceededDocIds: string[];
+  totalExcess: number;
+}
+
+/**
+ * Recorre los gastos de la legalización comparando `parseAmount(totalFactura)`
+ * con `CONSUMPTION_LIMIT` (tope por factura, HU-0008). `totalExcess` acumula la
+ * suma de los montos excedidos (amount - tope) solo de los documentos excedidos.
+ */
+export function getLegalizationExcess(id: string): LegalizationExcess {
+  const leg = getLegalization(id);
+  if (!leg) return { hasExcess: false, exceededDocIds: [], totalExcess: 0 };
+  const exceededDocIds: string[] = [];
+  let totalExcess = 0;
+  for (const docId of leg.expenseIds) {
+    const doc = getDocument(docId);
+    if (!doc) continue;
+    const amount = parseAmount(doc.extracted?.totalFactura);
+    if (amount > CONSUMPTION_LIMIT) {
+      exceededDocIds.push(docId);
+      totalExcess += amount - CONSUMPTION_LIMIT;
+    }
+  }
+  return {
+    hasExcess: exceededDocIds.length > 0,
+    exceededDocIds,
+    totalExcess,
+  };
+}
+
+/** Convierte un `Date` a `yyyy-mm-dd` en hora local (sin offset de zona). */
+function toLocalDateOnlyISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Cuenta días hábiles (Lunes a Viernes) entre dos fechas (HU-0009).
+ * Convención: rango [from, to) — incluye `from` y excluye `to`. Se excluyen
+ * Sábado (6) y Domingo (0); no se consideran festivos. Devuelve 0 si alguna
+ * fecha es inválida o si `to` <= `from`.
+ */
+export function businessDaysBetween(fromISO: string, toISO: string): number {
+  const from = new Date(`${fromISO}T00:00:00`);
+  const to = new Date(`${toISO}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  if (to.getTime() <= from.getTime()) return 0;
+  let count = 0;
+  const cursor = new Date(from);
+  while (cursor.getTime() < to.getTime()) {
+    const dow = cursor.getDay();
+    if (dow !== 0 && dow !== 6) count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
+export interface LegalizationTimeStatus {
+  outOfTime: boolean;
+  daysElapsed: number;
+  consumoDate: string | null;
+}
+
+/**
+ * Días hábiles transcurridos desde la fecha de consumo (proxy =
+ * `getLegalizationConsumoDate`) hasta `now` (HU-0009). `outOfTime` cuando
+ * `daysElapsed` supera `LEGALIZATION_MAX_BUSINESS_DAYS`. Sin fecha de consumo →
+ * no hay incumplimiento detectable ({ outOfTime: false, daysElapsed: 0 }).
+ */
+export function getLegalizationTimeStatus(
+  id: string,
+  now: Date = new Date(),
+): LegalizationTimeStatus {
+  const consumoDate = getLegalizationConsumoDate(id);
+  if (!consumoDate) return { outOfTime: false, daysElapsed: 0, consumoDate: null };
+  const daysElapsed = businessDaysBetween(consumoDate, toLocalDateOnlyISO(now));
+  return {
+    outOfTime: daysElapsed > LEGALIZATION_MAX_BUSINESS_DAYS,
+    daysElapsed,
+    consumoDate,
+  };
+}
+
+export interface LeaderApprovalRequirement {
+  excess: boolean;
+  time: boolean;
+  any: boolean;
+}
+
+/**
+ * Combina los motivos que requieren aprobación del líder (HU-0008 exceso +
+ * HU-0009 tiempo). `any` = excess || time. `now` se propaga para tests
+ * deterministas; por defecto usa la fecha actual.
+ */
+export function requiresLeaderApproval(
+  id: string,
+  now: Date = new Date(),
+): LeaderApprovalRequirement {
+  const excess = getLegalizationExcess(id).hasExcess;
+  const time = getLegalizationTimeStatus(id, now).outOfTime;
+  return { excess, time, any: excess || time };
+}
+
+/**
+ * ¿La aprobación del líder cubre todos los motivos requeridos? Si no se
+ * requiere ningún motivo → no hay nada pendiente (true). Si se requiere y no
+ * existe `leaderApproval`, o no cubre algún motivo requerido → false.
+ */
+export function isLeaderApproved(id: string, now: Date = new Date()): boolean {
+  const req = requiresLeaderApproval(id, now);
+  if (!req.any) return true;
+  const leg = getLegalization(id);
+  const approval = leg?.leaderApproval;
+  if (!approval) return false;
+  if (req.excess && !approval.excess) return false;
+  if (req.time && !approval.time) return false;
+  return true;
+}
+
+/**
+ * Simula la aprobación del líder (no hay backend ni rol líder): fija
+ * `leaderApproval` con los motivos que requería en el momento, timestamp y
+ * registra un evento de auditoría. Llama a `notify()`.
+ */
+export function approveByLeader(id: string): Legalization | undefined {
+  const all = readLegalizations();
+  const idx = all.findIndex((l) => l.id === id);
+  if (idx === -1) return undefined;
+  const current = all[idx];
+  const req = requiresLeaderApproval(id);
+  const at = new Date().toISOString();
+  const motives: string[] = [];
+  if (req.excess) motives.push("excess");
+  if (req.time) motives.push("time");
+  const reason =
+    motives.length > 0 ? `leader-approval:${motives.join(",")}` : "leader-approval";
+  const next: Legalization = {
+    ...current,
+    leaderApproval: { approvedAt: at, excess: req.excess, time: req.time },
+    auditLog: [
+      ...(current.auditLog ?? []),
+      { at, fromStatus: current.status, toStatus: current.status, reason, actor: "leader" },
+    ],
+  };
+  all[idx] = next;
+  writeLegalizations(all);
+  notify();
+  return next;
+}
+
+export interface SubmitToGestorSapResult {
+  can: boolean;
+  blockers: string[];
+}
+
+/**
+ * ¿Se puede enviar al Gestor SAP (HU-0011)? Bloqueadores: duplicados,
+ * aprobación del líder pendiente por exceso y aprobación del líder pendiente por
+ * tiempo. `can` = sin bloqueadores Y con al menos un gasto. `now` opcional para
+ * tests deterministas.
+ */
+export function canSubmitToGestorSap(
+  id: string,
+  now: Date = new Date(),
+): SubmitToGestorSapResult {
+  const blockers: string[] = [];
+  const leg = getLegalization(id);
+  if (getBlockingDuplicates(id).length > 0) blockers.push("duplicates");
+  const req = requiresLeaderApproval(id, now);
+  if (req.any && !isLeaderApproved(id, now)) {
+    if (req.excess) blockers.push("leader-approval:excess");
+    if (req.time) blockers.push("leader-approval:time");
+  }
+  const can = blockers.length === 0 && (leg?.expenseIds.length ?? 0) > 0;
+  return { can, blockers };
 }
