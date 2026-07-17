@@ -84,6 +84,25 @@ acepta contabilizaciones primarias en esa fecha), no algo que el payload
 pueda evitar. `fecha_contabilizacion` se manda como la fecha de hoy
 (`apps/web/src/features/legalizacion/lib/sap.ts`, `formatSapDate`).
 
+## Problema 4 (CONFIRMADO en prueba de flujo completo, no es bug nuestro) — Cuenta contable bloqueada para contabilizaciones
+
+Al probar el flujo completo (`/gestor` aprobar → contabilizar → archivar) con
+la categoría **"Alojamiento"** (`cuenta_contable: "5155050500"`), la
+contabilización falló consistentemente con:
+
+```
+"La cta. 5155050500 CF01 está bloqueada para contabilizaciones."
+```
+
+Mismo patrón que el Problema 3 (bloqueo de configuración en SAP QA, no del
+payload): la cuenta de mayor `5155050500` (Gastos Viajes Alojamiento) está
+bloqueada para la sociedad `CF01`. Con la categoría **"Otros"**
+(`cuenta_contable: "5155950500"`), usando el mismo NIT/CECO/monto, la
+contabilización **sí funcionó** (`status: "OK"`, `num_doc` asignado) y el
+archivado posterior en DocuWare también (`codigoerror: 0`, `dwdocid`
+asignado) — confirmando que el resto del flujo end-to-end (SAP →
+DocuWare) es correcto; el bloqueo es específico de esa cuenta contable.
+
 ## Decisión
 
 1. Los dos bugs de payload (Bug 1 y Bug 2) quedan **corregidos en código**.
@@ -91,9 +110,16 @@ pueda evitar. `fecha_contabilizacion` se manda como la fecha de hoy
    `interpretSapConsulta` en `apps/api/src/lib/server/sap.ts`) en vez de
    fallar en silencio. La legalización queda marcada como fallida y el gestor
    puede reintentar.
-3. El bloqueo del CeCo (Problema 3) **no se investiga ni se corrige** en esta
-   iteración — es una configuración de SAP QA (periodo/CeCo), no del payload.
-   Se documenta acá para no perder el contexto.
+3. Los bloqueos del CeCo (Problema 3) y de la cuenta contable (Problema 4)
+   **no se investigan ni se corrigen** en esta iteración — son configuración
+   de SAP QA (periodo/CeCo/cuenta bloqueada), no del payload. Se documentan
+   acá para no perder el contexto.
+4. **Confirmado con una prueba de flujo completo** (`/gestor` aprobar →
+   contabilizar en SAP → consultar con reintentos → archivar en DocuWare) que
+   el pipeline end-to-end funciona con datos 100% reales cuando se usa una
+   cuenta contable que no está bloqueada (`5155950500`, "Otros"):
+   contabilización `OK` con `num_doc` real (`6000025363`) y archivado en
+   DocuWare exitoso (`dwdocid` real) con ese mismo número.
 
 ## Consecuencias
 
@@ -105,7 +131,9 @@ pueda evitar. `fecha_contabilizacion` se manda como la fecha de hoy
   o si también era de formato.
 - El equipo de integraciones/SAP debe confirmar por qué el CeCo `10104000`
   está bloqueado para `17.07.2026` (periodo cerrado, configuración pendiente,
-  o restricción específica de QA).
+  o restricción específica de QA), y por qué la cuenta contable `5155050500`
+  (Alojamiento) está bloqueada para `CF01` — mientras tanto, usar la categoría
+  "Otros" (`5155950500`) es la única confirmada como funcional en QA.
 
 ## Referencias
 
