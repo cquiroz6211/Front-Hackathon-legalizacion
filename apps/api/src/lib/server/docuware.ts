@@ -87,7 +87,7 @@ function buildCampos(input: ArchiveInput, byteLength: number): CampoArchivador[]
   ];
 }
 
-const ID_KEYS = [/^id$/i, /^iddocumento$/i, /id.*documento/i, /documento.*id/i];
+const ID_KEYS = [/^id$/i, /^iddocumento$/i, /id.*documento/i, /documento.*id/i, /^dwdocid$/i];
 
 /** Busca (recursivamente) un identificador de documento en la respuesta. */
 function extractDocumentId(data: unknown): string | null {
@@ -125,11 +125,23 @@ function extractDocumentId(data: unknown): string | null {
 
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
+  let parsed: unknown = text;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
     return text;
   }
+  // El gateway devuelve el body doblemente codificado como JSON (una cadena
+  // que a su vez contiene JSON, p.ej. `"{\"codigoerror\":0,...}"`). Si el
+  // primer parseo dio un string, se intenta desanidar una vez más.
+  if (typeof parsed === "string") {
+    try {
+      return JSON.parse(parsed);
+    } catch {
+      return parsed;
+    }
+  }
+  return parsed;
 }
 
 /** Archiva el documento (guarda en DocuWare vía el gateway Comfama). */
@@ -147,7 +159,12 @@ export async function archiveDocument(input: ArchiveInput): Promise<ArchiveResul
     const form = new FormData();
     form.append("idArchivador", cfg.archivadorId);
     form.append("jsonCamposDelArchivador", JSON.stringify(campos));
+    // `documento` va como TEXTO base64 plano (campo de formulario normal, sin
+    // Blob ni filename): el "El documento no tiene nombre!" no era por falta
+    // de filename en esta parte, sino porque falta el campo `nombreDocumento`
+    // (separado), que el gateway exige explícitamente.
     form.append("documento", normalizeBase64(input.fileBase64));
+    form.append("nombreDocumento", input.fileName);
 
     return fetch(cfg.url, {
       method: "POST",
