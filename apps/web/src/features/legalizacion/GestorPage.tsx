@@ -380,7 +380,7 @@ const GestorPageInner = () => {
                 >
                   Bandeja Gestor SAP
                 </Typography>
-                <Typography variant="h2" className="text-secondary-900">
+                <Typography variant="h4" className="text-secondary-900">
                   Aprobación de <span className="font-bold">legalizaciones</span>
                 </Typography>
               </div>
@@ -937,7 +937,7 @@ const EmptyInbox = ({ onSignOut }: { onSignOut: () => void }) => (
     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-secondary-400 bg-primary-50 text-primary">
       <LuInbox className="h-7 w-7" />
     </div>
-    <Typography variant="h3" className="text-secondary-900">
+    <Typography variant="h4" className="text-secondary-900">
       No hay legalizaciones pendientes de aprobación
     </Typography>
     <Typography variant="body2" className="mx-auto max-w-md text-secondary-600">

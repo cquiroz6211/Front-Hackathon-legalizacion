@@ -22,7 +22,7 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   return (
     <main
-      className="flex h-screen flex-col items-center justify-center overflow-hidden bg-secondary-100 px-6 py-6"
+      className="flex min-h-screen flex-col items-center justify-center bg-secondary-100 px-6 py-6"
       aria-labelledby="login-page-title"
     >
       <section className="w-full max-w-md space-y-6 rounded-2xl bg-white p-8 shadow-sm border border-secondary-400">
