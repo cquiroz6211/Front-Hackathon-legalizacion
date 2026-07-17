@@ -44,6 +44,7 @@ import {
   getSapEligibleDocuments,
 } from "./lib/sap";
 import type { DocumentRecord, DocuwareArchiveResult, Legalization } from "./types/document";
+import { DocumentFilePreview } from "./components/DocumentFilePreview";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 function formatCurrencyARS(n: number): string {
@@ -509,6 +510,12 @@ const GestorRow = ({
     const doc = getDocument(docId);
     if (doc) docs.push(doc);
   }
+  // Vista previa por soporte (colapsada por defecto): el gestor la abre para
+  // ver la factura real antes de decidir si aprueba o rechaza.
+  const [previewIds, setPreviewIds] = useState<Record<string, boolean>>({});
+  const togglePreview = (docId: string) => {
+    setPreviewIds((prev) => ({ ...prev, [docId]: !prev[docId] }));
+  };
 
   return (
     <li className="rounded-2xl border border-secondary-400 bg-white">
@@ -639,27 +646,50 @@ const GestorRow = ({
               </div>
             ) : (
               <ul className="space-y-2">
-                {docs.map((doc) => (
-                  <li
-                    key={doc.id}
-                    className="flex flex-col gap-1 rounded-xl border border-secondary-400 p-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <LuFileText className="h-4 w-4 flex-shrink-0 text-primary" />
-                      <div className="min-w-0">
-                        <p className="truncate font-mono text-xs text-secondary-900">
-                          {doc.fileName}
-                        </p>
-                        <p className="text-xs text-secondary-600">
-                          {doc.extracted?.fecha ? formatDate(doc.extracted.fecha) : "Sin fecha"}
-                        </p>
+                {docs.map((doc) => {
+                  const showPreview = !!previewIds[doc.id];
+                  return (
+                    <li
+                      key={doc.id}
+                      className="rounded-xl border border-secondary-400 p-3 space-y-3"
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <LuFileText className="h-4 w-4 flex-shrink-0 text-primary" />
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-xs text-secondary-900">
+                              {doc.fileName}
+                            </p>
+                            <p className="text-xs text-secondary-600">
+                              {doc.extracted?.fecha ? formatDate(doc.extracted.fecha) : "Sin fecha"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-xs font-semibold text-secondary-900">
+                            {formatCurrencyARS(parseAmount(doc.extracted?.totalFactura))}
+                          </span>
+                          <Button
+                            variant="outlined"
+                            size="sm"
+                            className="min-h-9 px-3"
+                            action={() => togglePreview(doc.id)}
+                          >
+                            {showPreview ? "Ocultar factura" : "Ver factura"}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    <span className="font-mono text-xs font-semibold text-secondary-900">
-                      {formatCurrencyARS(parseAmount(doc.extracted?.totalFactura))}
-                    </span>
-                  </li>
-                ))}
+                      {showPreview ? (
+                        <DocumentFilePreview
+                          docId={doc.id}
+                          fileName={doc.fileName}
+                          fileType={doc.fileType}
+                          heightClassName="h-80"
+                        />
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

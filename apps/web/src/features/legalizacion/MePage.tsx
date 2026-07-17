@@ -41,7 +41,7 @@ import type {
   LegalizationStatus,
   Role,
 } from "./types/document";
-import { InvoicePreview } from "./components/InvoicePreview";
+import { DocumentFilePreview } from "./components/DocumentFilePreview";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 const STATUS_LABEL: Record<DocumentStatus, string> = {
@@ -656,7 +656,12 @@ const Preview = ({ doc }: { doc: DocumentRecord }) => {
       {duplicateMessage ? (
         <Alert variant="filled" type="warning" title={duplicateMessage} showIcon />
       ) : null}
-      <InvoicePreview fields={e} fileName={doc.fileName} />
+      <DocumentFilePreview
+        docId={doc.id}
+        fileName={doc.fileName}
+        fileType={doc.fileType}
+        heightClassName="h-80"
+      />
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
         <PreviewRow label="Fecha de Emisión" value={e.fecha} />
         <PreviewRow label="N° Factura" value={e.nroFactura} mono />
