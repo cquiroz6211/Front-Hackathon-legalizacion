@@ -14,7 +14,7 @@ import {
 
 import { Alert, Button, Chip, Input, Typography, useToast } from "@comfama/comfama-ui-react";
 
-import { authRoleLabel, getSession, signOut } from "@/features/auth";
+import { getSession, signOut } from "@/features/auth";
 
 import {
   archiveDocumentByBase64,
@@ -152,7 +152,6 @@ export const GestorPage = () => (
 const GestorPageInner = () => {
   const session = getSession();
   const gestorId = session?.identifier ?? "Gestor SAP";
-  const gestorRole = session ? authRoleLabel(session.role) : "Gestor SAP";
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -381,7 +380,7 @@ const GestorPageInner = () => {
                   Bandeja Gestor SAP
                 </Typography>
                 <Typography variant="h4" className="text-secondary-900">
-                  Aprobación de <span className="font-bold">legalizaciones</span>
+                  <span className="font-bold">Aprobación de legalizaciones</span>
                 </Typography>
               </div>
             </div>
@@ -389,7 +388,7 @@ const GestorPageInner = () => {
               Revisá y decidí sobre las legalizaciones enviadas. La aprobación es definitiva; el
               rechazo requiere un motivo y también es terminal.
             </Typography>
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-secondary-400 bg-secondary-100 px-4 py-2">
+            {/* <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-secondary-400 bg-secondary-100 px-4 py-2">
               <span className="text-xs font-bold uppercase tracking-widest text-secondary-600">
                 Sesión
               </span>
@@ -397,7 +396,7 @@ const GestorPageInner = () => {
               <Chip color="primary" hoverable={false}>
                 {gestorRole}
               </Chip>
-            </div>
+            </div> */}
           </section>
 
           {pending.length === 0 ? (
