@@ -180,10 +180,10 @@ const ReviewPageInner = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-secondary-100">
+    <div className="flex h-screen flex-col bg-secondary-100">
       <LegalizacionHeader variant="review" />
 
-      <main className="flex flex-1 flex-col md:flex-row gap-4 p-4 overflow-hidden">
+      <main className="flex flex-1 min-h-0 flex-col md:flex-row gap-4 p-4 overflow-hidden">
         <section className="hidden md:flex flex-1 bg-white border border-secondary-400 rounded-2xl flex-col relative overflow-hidden">
           <div className="bg-secondary-100 border-b border-secondary-400 text-secondary-900 px-6 py-4 flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ const ReviewPageInner = () => {
               <div className="w-10 h-10 bg-primary-50 rounded-2xl flex items-center justify-center text-primary">
                 <LuPenLine className="w-5 h-5" />
               </div>
-              <Typography variant="h2" className="text-secondary-900">
+              <Typography variant="h4" className="text-secondary-900 whitespace-nowrap">
                 Revisión de <span className="font-bold">Datos</span>
               </Typography>
             </div>
