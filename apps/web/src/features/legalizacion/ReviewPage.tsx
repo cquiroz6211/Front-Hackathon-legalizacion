@@ -219,11 +219,11 @@ const ReviewPageInner = () => {
                 className="flex-1 w-full bg-secondary-100"
               />
             ) : (
-              <div className="flex-1 flex items-center justify-center overflow-auto bg-secondary-100 p-4">
+              <div className="flex-1 flex overflow-hidden bg-secondary-100 p-4">
                 <img
                   src={filePreviewUrl}
                   alt={`Previsualización de ${doc?.fileName ?? "documento"}`}
-                  className="max-h-full max-w-full object-contain shadow-lg"
+                  className="m-auto max-h-full max-w-full object-contain shadow-lg"
                 />
               </div>
             )

@@ -12,7 +12,7 @@ import {
   LuUpload,
 } from "react-icons/lu";
 
-import { Alert, Button, Select, Typography, useToast } from "@comfama/comfama-ui-react";
+import { Button, Select, Typography, useToast } from "@comfama/comfama-ui-react";
 
 import {
   addDocument,
@@ -379,14 +379,14 @@ export const UploadPage = () => {
       {flow === null ? (
         <UploadSelection onSelect={setFlow} />
       ) : (
-        <main className="flex flex-1 flex-col items-center px-6 pt-8 pb-32">
-          <div className="w-full max-w-4xl space-y-6">
+        <main className="flex flex-1 flex-col items-center px-6 pt-4 pb-28">
+          <div className="w-full max-w-4xl space-y-4">
             <Button variant="ghost" action={() => setFlow(null)} className="min-h-12 px-4">
               <LuArrowLeft className="mr-2 h-5 w-5" />
               Volver
             </Button>
 
-            <header className="space-y-2 text-center">
+            <header className="space-y-1 text-center">
               <Typography variant="h4" className="text-primary">
                 {flow === "invoice" ? "Cargar facturas" : "Cargar cuenta de cobro"}
               </Typography>
@@ -397,8 +397,8 @@ export const UploadPage = () => {
               </Typography>
             </header>
 
-            <div className="space-y-5 rounded-2xl border border-secondary-400 bg-white p-6 md:p-8">
-              <div className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-4 rounded-2xl border border-secondary-400 bg-white p-5 md:p-6">
+              <div className="grid gap-4 md:grid-cols-2">
                 {flow === "invoice" && (
                   <div className="space-y-2">
                     <Select
@@ -447,23 +447,23 @@ export const UploadPage = () => {
               {flow === "invoice" ? (
                 <FileUploader
                   label="Factura"
-                  description="PDF, JPG o PNG"
+                  description="PDF, JPG o PNG · máx. 10 MB"
                   file={invoiceFile}
                   onChange={setInvoiceFile}
                   allowCamera
                 />
               ) : (
-                <div className="grid gap-5 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <FileUploader
                     label="RUT"
-                    description="Documento obligatorio en PDF, JPG o PNG"
+                    description="Documento obligatorio · PDF, JPG o PNG · máx. 10 MB"
                     file={rutFile}
                     onChange={setRutFile}
                     allowCamera
                   />
                   <FileUploader
                     label="Cuenta de cobro"
-                    description="Documento principal en PDF, JPG o PNG"
+                    description="Documento principal · PDF, JPG o PNG · máx. 10 MB"
                     file={accountFile}
                     onChange={setAccountFile}
                     allowCamera
@@ -471,14 +471,6 @@ export const UploadPage = () => {
                 </div>
               )}
             </div>
-
-            <Alert
-              variant="outline"
-              type="info"
-              title="Formatos soportados"
-              description="PDF, JPG o PNG. Tamaño máximo sugerido: 10 MB por archivo."
-              showIcon
-            />
           </div>
         </main>
       )}
@@ -582,7 +574,7 @@ const FileUploader = ({ label, description, file, onChange, allowCamera }: FileU
   };
 
   return (
-    <section className="flex min-h-72 flex-col justify-between rounded-2xl border border-secondary-400 bg-white p-6">
+    <section className="flex min-h-52 flex-col justify-between gap-3 rounded-2xl border border-secondary-400 bg-white p-5">
       <div className="space-y-2">
         <Typography variant="h4" className="text-secondary-900">
           {label}
@@ -608,7 +600,7 @@ const FileUploader = ({ label, description, file, onChange, allowCamera }: FileU
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-3 py-5 text-center text-secondary-600">
+        <div className="flex flex-col items-center gap-2 py-2 text-center text-secondary-600">
           <LuFileText className="h-10 w-10 text-primary" />
           <Typography variant="body2">Ningún archivo seleccionado</Typography>
         </div>

@@ -14,8 +14,8 @@ export const InvoicePreview = ({ fields, fileName }: InvoicePreviewProps) => {
   const monto = fields.monto || DEFAULT_AMOUNT;
 
   return (
-    <div className="flex-1 flex items-center justify-center p-8 overflow-auto bg-secondary-100">
-      <div className="bg-white shadow-lg w-full max-w-2xl aspect-[1/1.41] p-8 flex flex-col gap-6 border border-secondary-400 text-secondary-900">
+    <div className="flex-1 flex p-8 overflow-auto bg-secondary-100">
+      <div className="m-auto bg-white shadow-lg w-full max-w-2xl aspect-[1/1.41] p-8 flex flex-col gap-6 border border-secondary-400 text-secondary-900">
         <div className="flex justify-between items-start border-b border-secondary-400 pb-4">
           <div className="space-y-2">
             <div className="h-8 w-32 bg-secondary-400 rounded" />
