@@ -4,7 +4,6 @@ import {
   LuCircleAlert,
   LuCircleCheck,
   LuFileText,
-  LuFileUp,
   LuPenLine,
   LuRefreshCw,
   LuRotateCw,
@@ -425,10 +424,6 @@ const ReviewPageInner = () => {
                   Confirmar Datos
                 </>
               )}
-            </Button>
-            <Button variant="outlined" className="w-full" action={() => navigate("/upload")}>
-              <LuFileUp className="w-4 h-4 mr-2" />
-              Subir otro documento
             </Button>
           </div>
         </section>
