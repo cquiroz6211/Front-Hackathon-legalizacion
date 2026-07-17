@@ -24,17 +24,26 @@ processRouter.post("/process", async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, error: 'Falta "fileBase64" en el body.' });
   }
 
+  const startedAt = Date.now();
+  console.log(`[process] Inicio del flujo completo (${body.fileName ?? "sin nombre"}).`);
+
   try {
+    const ocrStartedAt = Date.now();
     const ocr = await analyzeLayout(body.fileBase64);
+    console.log(`[process] OCR (Document Intelligence): ${Date.now() - ocrStartedAt}ms`);
     if (!ocr.content) {
       return res.status(422).json({ ok: false, error: "El OCR no devolvió texto legible." });
     }
 
+    const extractStartedAt = Date.now();
     const fields = await extractFields(ocr.content);
+    console.log(`[process] Extracción (Azure OpenAI): ${Date.now() - extractStartedAt}ms`);
 
+    console.log(`[process] Flujo completo terminado en ${Date.now() - startedAt}ms.`);
     return res.json({ ok: true, fields, ocr: { content: ocr.content } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
+    console.log(`[process] Flujo completo falló tras ${Date.now() - startedAt}ms: ${message}`);
     return res.status(502).json({ ok: false, error: message });
   }
 });

@@ -36,8 +36,15 @@ const EMPTY_FIELDS: ExtractedFields = {
   totalFactura: "",
 };
 
+interface ChatCompletionUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
 interface ChatCompletionResponse {
   choices?: { message?: { content?: string } }[];
+  usage?: ChatCompletionUsage;
   error?: { message?: string };
 }
 
@@ -57,6 +64,11 @@ function toDataUrl(base64: string, mimeType: string): string {
   return `data:${mime};base64,${base64}`;
 }
 
+interface ChatCompletionOutcome {
+  content: string;
+  usage: ChatCompletionUsage | undefined;
+}
+
 /**
  * POST a chat completions con tolerancia a parámetros no soportados.
  *
@@ -68,10 +80,11 @@ function toDataUrl(base64: string, mimeType: string): string {
 async function postChatCompletion(
   body: Record<string, unknown>,
   contextLabel: string,
-): Promise<string> {
+): Promise<ChatCompletionOutcome> {
   const cfg = openAiConfig();
   const url = chatCompletionsUrl();
   const payload: Record<string, unknown> = { ...body };
+  const startedAt = Date.now();
 
   // Reintentos acotados: uno por cada parámetro no soportado que aparezca.
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -85,7 +98,14 @@ async function postChatCompletion(
       const data = (await res.json()) as ChatCompletionResponse;
       const content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error(`${contextLabel}: respuesta vacía del modelo.`);
-      return content;
+      const elapsedMs = Date.now() - startedAt;
+      const usage = data.usage;
+      console.log(
+        `[tokens] ${contextLabel}: prompt=${usage?.prompt_tokens ?? "?"} ` +
+          `completion=${usage?.completion_tokens ?? "?"} total=${usage?.total_tokens ?? "?"} ` +
+          `(${elapsedMs}ms)`,
+      );
+      return { content, usage };
     }
 
     const detail = await res.text().catch(() => "");
@@ -146,7 +166,12 @@ function parseJsonLoose(content: string): Record<string, unknown> {
  */
 export async function extractFields(ocrText: string): Promise<ExtractedFields> {
   const cfg = openAiConfig();
-  const content = await postChatCompletion(
+  console.log(
+    "[extractFields] OCR enviado al agente (primeros 1000 chars):\n",
+    ocrText.slice(0, 1000),
+  );
+
+  const { content } = await postChatCompletion(
     {
       messages: [
         { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
@@ -156,11 +181,15 @@ export async function extractFields(ocrText: string): Promise<ExtractedFields> {
       temperature: cfg.temperature,
       response_format: { type: "json_object" },
     },
-    "Azure OpenAI",
+    "extractFields",
   );
 
+  console.log("[extractFields] Respuesta cruda del agente:\n", content);
+
   try {
-    return coerceFields(parseJsonLoose(content));
+    const fields = coerceFields(parseJsonLoose(content));
+    console.log("[extractFields] Campos parseados:", fields);
+    return fields;
   } catch {
     throw new Error(
       `Azure OpenAI: no se pudo parsear la respuesta como JSON. Respuesta: ${content.slice(0, 500)}`,
@@ -209,7 +238,7 @@ export async function validateDocumentQuality(
 ): Promise<QualityCheck> {
   const dataUrl = toDataUrl(imageBase64, mimeType);
 
-  const content = await postChatCompletion(
+  const { content } = await postChatCompletion(
     {
       messages: [
         { role: "system", content: QUALITY_VALIDATION_SYSTEM_PROMPT },
@@ -225,7 +254,7 @@ export async function validateDocumentQuality(
       temperature: 0,
       response_format: { type: "json_object" },
     },
-    "Azure OpenAI (visión)",
+    "validateDocumentQuality",
   );
 
   try {

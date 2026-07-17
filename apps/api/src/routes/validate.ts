@@ -29,6 +29,8 @@ validateRouter.post("/validate", async (req: Request, res: Response) => {
   }
 
   const fileType = body.fileType ?? "image/jpeg";
+  const startedAt = Date.now();
+  console.log(`[validate] Inicio de validación de legibilidad (tipo: ${fileType}).`);
 
   try {
     // El modelo de visión solo acepta imágenes. Si es PDF, convertimos la
@@ -49,9 +51,11 @@ validateRouter.post("/validate", async (req: Request, res: Response) => {
     }
 
     const quality = await validateDocumentQuality(imageBase64, imageMime);
+    console.log(`[validate] Terminado en ${Date.now() - startedAt}ms. legible=${quality.legible}`);
     return res.json({ ok: true, quality, convertedFromPdf });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
+    console.log(`[validate] Falló tras ${Date.now() - startedAt}ms: ${message}`);
     return res.status(502).json({ ok: false, error: message });
   }
 });

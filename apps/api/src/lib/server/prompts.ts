@@ -72,12 +72,12 @@ Devuelve EXACTAMENTE estas claves (todas en formato string; usa "" si no aplica)
   "telefono":      "teléfono del emisor",
   "departamento":  "departamento",
   "municipio":     "municipio o ciudad",
-  "iva19Base":     "base gravada al 19%",
-  "iva19Valor":    "valor del IVA al 19%",
-  "iva5Base":      "base gravada al 5%",
-  "iva5Valor":     "valor del IVA al 5%",
-  "iva0Base":      "base exenta (0%)",
-  "iva0Valor":     "valor IVA 0% (normalmente 0)",
+  "iva19Base":     "base gravada al 19% (columna IVA/Iva de la factura)",
+  "iva19Valor":    "valor del IVA al 19% (columna IVA/Iva de la factura)",
+  "iva5Base":      "base gravada del INC — Impuesto Nacional al Consumo, típicamente 8% (columna 'INC' o 'IPO consumo' de la factura; NO es un IVA al 5%, es un impuesto distinto y puede venir junto con el IVA 19% en la misma factura, p.ej. hoteles/restaurantes)",
+  "iva5Valor":     "valor del INC — Impuesto Nacional al Consumo (columna 'INC' o 'IPO consumo' de la factura)",
+  "iva0Base":      "base exenta o no gravada (columna/total 'IVA 0%', 'Exento', 'No gravado' o 'Cargos no gravados' de la factura)",
+  "iva0Valor":     "valor del IVA al 0% (normalmente 0,00; solo distinto de 0 si la factura lo desglosa explícitamente así)",
   "totalFactura":  "total de la factura"
 }
 
@@ -86,6 +86,7 @@ Reglas:
 - Usa el punto como separador de miles y la coma como decimal (es-CO). Ej: 1.234.567,89
 - Si un dato no está presente, deja "" (cadena vacía). No inventes valores.
 - Normaliza las fechas a YYYY-MM-DD.
+- El INC (iva5Base/iva5Valor) puede aparecer con distintos nombres en la factura: "INC", "IPC", "IPO consumo", "Impoconsumo". Es un impuesto DISTINTO del IVA 19% y puede coexistir con él en la misma factura (p.ej. alojamiento con IVA 19% + alimentos/bebidas con INC 8%): extrae ambos de forma independiente, cada uno de su propia columna/total.
 - **Caso especial RUT de Colombia:** Si el texto OCR proviene de un documento del Registro Único Tributario (RUT) de la DIAN en Colombia, el titular del RUT es el proveedor de los servicios. Extrae:
   - El NIT del titular (casilla 5 de Identificación Tributaria) en el campo 'nit'.
   - La razón social o los apellidos y nombres combinados del titular (casillas 31 a 35) en el campo 'proveedor'.

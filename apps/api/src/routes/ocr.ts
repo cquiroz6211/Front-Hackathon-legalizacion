@@ -22,11 +22,14 @@ ocrRouter.post("/ocr", async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, error: 'Falta "fileBase64" en el body.' });
   }
 
+  const startedAt = Date.now();
   try {
     const ocr = await analyzeLayout(body.fileBase64);
+    console.log(`[ocr] Document Intelligence terminado en ${Date.now() - startedAt}ms.`);
     return res.json({ ok: true, ocr: { content: ocr.content, tables: ocr.tables } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
+    console.log(`[ocr] Falló tras ${Date.now() - startedAt}ms: ${message}`);
     return res.status(502).json({ ok: false, error: message });
   }
 });
