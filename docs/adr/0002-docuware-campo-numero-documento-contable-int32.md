@@ -2,9 +2,9 @@
 
 ## Estado
 
-Resuelto (con workaround explícito para el campo Int32 — ver Problema 4 y
-Decisión #4). Verificado end-to-end contra QA con un número de documento SAP
-real.
+Resuelto (con workaround explícito para los campos Int — ver Problemas 4 y 5).
+Verificado end-to-end contra QA con un número de documento SAP real y un monto
+real en formato colombiano.
 
 ## Contexto
 
@@ -101,14 +101,37 @@ por si el archivador los trata como obligatorios — decisión de negocio para
 priorizar velocidad de entrega (hackathon) sobre esperar la fuente real de
 cada campo.
 
+## Problema 5 (WORKAROUND aplicado) — El campo `VALOR_DE_COMPROBANTE` también es Int y rechaza el formato colombiano
+
+Con el Problema 4 resuelto, el siguiente intento con un monto real falló con:
+
+```
+"No se pudo almacenar el documento. Mensaje Original: 422 Unprocessable Entity
+(The value '6.329.928,00' field 'VALOR_DE_COMPROBANTE' could not be converted
+to type 'Int'. The reason is: Input string was not in a correct format.)"
+```
+
+Mismo patrón que el Problema 4 pero por formato, no por rango: `VALOR_DE_COMPROBANTE`
+también es un campo Int, y se le enviaba el monto tal como lo extrae la IA —
+formato colombiano con punto de miles y coma decimal (`"6.329.928,00"`), que
+.NET no reconoce como número.
+
+**Fix aplicado**: `parseAmountToInt` (`apps/api/src/lib/server/docuware.ts`)
+limpia el formato colombiano (quita puntos de miles, cambia la coma decimal
+por punto) y redondea a entero plano antes de enviarlo, espejando la lógica
+de `parseAmount` del store del frontend. Verificado con el monto real
+`"6.329.928,00"` → `codigoerror: 0`, `dwdocid` asignado.
+
 ## Decisión
 
 1. Los tres bugs de payload (1, 2 y 3) quedan **corregidos en código**.
-2. El Problema 4 se resuelve con un **workaround explícito**: recorte a 9
-   dígitos de `NUMERO_DE_DOCUMENTO_CONTABLE` + placeholders aleatorios en los
-   campos sin fuente real. Es una decisión de negocio consciente (priorizar
-   shipeo rápido), no un descuido — el equipo de Comfama/DocuWare debería
-   igual ajustar el tipo del campo (a texto o Int64/BigInt) para no perder
+2. Los Problemas 4 y 5 se resuelven con **workarounds explícitos**: recorte a
+   9 dígitos de `NUMERO_DE_DOCUMENTO_CONTABLE`, conversión de formato
+   colombiano a entero plano en `VALOR_DE_COMPROBANTE`, y placeholders
+   aleatorios en los campos sin fuente real. Son decisiones de negocio
+   conscientes (priorizar shipeo rápido), no descuidos — el equipo de
+   Comfama/DocuWare debería igual ajustar el tipo del campo
+   `NUMERO_DE_DOCUMENTO_CONTABLE` (a texto o Int64/BigInt) para no perder
    dígitos del número real, y definir de dónde deberían salir los campos hoy
    aleatorios.
 3. El archivado sigue siendo **no bloqueante**: si DocuWare rechaza el
@@ -123,13 +146,18 @@ cada campo.
   disponible en `IDDOCUMENTO_SAP` y en el propio store de la app
   (`sapContabilizacion.numeroDocumento`), así que no hay pérdida de dato fuera
   de ese campo específico del archivador.
-- Los 7 campos con placeholder aleatorio (ver arriba) no reflejan datos reales
-  de negocio; si en el futuro el archivador exige trazabilidad real en esos
-  campos (p. ej. auditorías), hay que reemplazar `randomPlaceholders()` por
-  fuentes reales (usuario SAP autenticado, digitador, tipo documental real, etc.).
+- `VALOR_DE_COMPROBANTE` queda como entero **sin decimales** (los centavos, si
+  los hubiera, se pierden por redondeo) — aceptable para montos en pesos
+  colombianos, que no suelen manejar fracciones de peso.
+- Los 7 campos con placeholder aleatorio (ver Problema 4) no reflejan datos
+  reales de negocio; si en el futuro el archivador exige trazabilidad real en
+  esos campos (p. ej. auditorías), hay que reemplazar `randomPlaceholders()`
+  por fuentes reales (usuario SAP autenticado, digitador, tipo documental
+  real, etc.).
 - El equipo de integraciones/DocuWare debería igual confirmar el cambio de
-  tipo del campo `NUMERO_DE_DOCUMENTO_CONTABLE` para eliminar la necesidad del
-  recorte.
+  tipo de `NUMERO_DE_DOCUMENTO_CONTABLE` (y revisar si otros campos numéricos
+  del archivador tienen el mismo problema de formato/rango) para eliminar la
+  necesidad de estos workarounds.
 
 ## Referencias
 

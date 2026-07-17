@@ -73,6 +73,24 @@ function truncateForInt32Field(value: string): string {
   return digits.length <= INT32_MAX_DIGITS ? digits : digits.slice(-INT32_MAX_DIGITS);
 }
 
+/**
+ * Convierte un monto en formato colombiano ("6.329.928,00": punto de miles,
+ * coma decimal) al entero plano que espera el campo Int `VALOR_DE_COMPROBANTE`
+ * del archivador DocuWare (mismo tipo de bug que `NUMERO_DE_DOCUMENTO_CONTABLE`
+ * — ver ADR 0002: .NET no puede parsear "6.329.928,00" como Int). Espeja la
+ * lógica de `parseAmount` del store del frontend para mantener consistencia.
+ */
+function parseAmountToInt(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  const cleaned = trimmed
+    .replace(/[^\d.,-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? String(Math.round(num)) : trimmed.replace(/\D/g, "");
+}
+
 const DIGIT_CHARS = "0123456789";
 const UPPER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const LOWER_CHARS = "abcdefghijklmnopqrstuvwxyz";
@@ -105,11 +123,13 @@ function randomPlaceholders() {
 
 /**
  * Construye los 16 campos del archivador. `NUMERO_DE_DOCUMENTO_CONTABLE` se
- * recorta a 9 dígitos para no romper el tipo Int32 del archivador (ver ADR
- * 0002). Los campos sin una fuente clara en la app (LIBRO_DE_CAJA,
- * CODIGO_DEL_TIPO_DOCUMENTAL, DESCRIPCION_TIPO_DOCUMENTAL, DIGITADOR,
- * USUARIO_SAP, NRODOCUMENTO, IDENTIFICADOR_SAP) se rellenan con datos
- * aleatorios (no vacíos) por si el archivador los exige como obligatorios.
+ * recorta a 9 dígitos y `VALOR_DE_COMPROBANTE` se convierte a entero plano
+ * (sin separadores de miles/decimales) para no romper los campos Int del
+ * archivador (ver ADR 0002). Los campos sin una fuente clara en la app
+ * (LIBRO_DE_CAJA, CODIGO_DEL_TIPO_DOCUMENTAL, DESCRIPCION_TIPO_DOCUMENTAL,
+ * DIGITADOR, USUARIO_SAP, NRODOCUMENTO, IDENTIFICADOR_SAP) se rellenan con
+ * datos aleatorios (no vacíos) por si el archivador los exige como
+ * obligatorios.
  */
 function buildCampos(input: ArchiveInput, byteLength: number): CampoArchivador[] {
   const numDoc = input.numeroDocumentoSap ?? "";
@@ -119,7 +139,7 @@ function buildCampos(input: ArchiveInput, byteLength: number): CampoArchivador[]
   return [
     campo("NUMERO_DE_DOCUMENTO_CONTABLE", truncateForInt32Field(numDoc)),
     campo("FECHA", input.fields.fecha ?? ""),
-    campo("VALOR_DE_COMPROBANTE", input.fields.totalFactura ?? ""),
+    campo("VALOR_DE_COMPROBANTE", parseAmountToInt(input.fields.totalFactura ?? "")),
     campo("LIBRO_DE_CAJA", placeholders.libroDeCaja),
     campo("TIPO_DOCUMENTAL", "Factura"),
     campo("FECHA_MODIFICACION", nowFormatted()),
