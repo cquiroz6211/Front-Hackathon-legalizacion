@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 210" role="img" aria-label="ViatiGo - Legalización de gastos">
+  <defs>
+    <linearGradient id="vg-pink" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#c2185b"/>
+      <stop offset="1" stop-color="#f0428c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Trazo inferior del chulo (check) -->
+  <path d="M18 118 L58 92 L96 138 L74 160 Z" fill="#b01455"/>
+  <path d="M30 106 L70 80 L108 126 L86 148 Z" fill="url(#vg-pink)"/>
+
+  <!-- Flecha ascendente -->
+  <path d="M74 160 L188 46 L166 40 L214 14 L212 68 L200 58 L96 158 Z" fill="url(#vg-pink)"/>
+  <path d="M214 14 L212 68 L200 58 L166 40 Z" fill="#e91e75"/>
+
+  <!-- Líneas de velocidad -->
+  <path d="M118 148 L170 100 L176 106 L128 152 Z" fill="#f0428c" opacity="0.85"/>
+  <path d="M134 162 L168 130 L173 135 L142 166 Z" fill="#f0428c" opacity="0.55"/>
+
+  <!-- Texto principal -->
+  <text x="238" y="128" font-family="'Segoe UI', Arial, sans-serif" font-size="88" font-weight="800">
+    <tspan fill="#414042">Viati</tspan><tspan fill="#e91e75">Go</tspan>
+  </text>
+
+  <!-- Subtítulo -->
+  <text x="240" y="176" font-family="'Segoe UI', Arial, sans-serif" font-size="27" font-weight="600" letter-spacing="6" fill="#6d6e71">LEGALIZACION DE GASTOS</text>
+</svg>
