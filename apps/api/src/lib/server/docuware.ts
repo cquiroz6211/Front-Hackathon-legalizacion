@@ -57,33 +57,82 @@ function nowFormatted(): string {
   );
 }
 
+const INT32_MAX_DIGITS = 9; // 999.999.999 < 2.147.483.647 (Int32 max): siempre cabe.
+
 /**
- * Construye los 16 campos del archivador. Los campos sin una fuente clara en
- * la app (LIBRO_DE_CAJA, CODIGO_DEL_TIPO_DOCUMENTAL, DESCRIPCION_TIPO_DOCUMENTAL,
- * DIGITADOR, USUARIO_SAP, NRODOCUMENTO, IDENTIFICADOR_SAP) van vacíos por
- * decisión de negocio, no por descuido.
+ * Recorta un número de documento SAP para que quepa en un campo Int32 del
+ * archivador DocuWare (ver ADR 0002: `NUMERO_DE_DOCUMENTO_CONTABLE` está
+ * tipado Int32 y los números reales de SAP, ~6 mil millones, lo exceden).
+ * Se conservan los últimos 9 dígitos (siempre < Int32 max). Es una decisión
+ * explícita de negocio para no bloquear el archivado mientras Comfama ajusta
+ * el tipo de campo; no se usa en IDDOCUMENTO_SAP (texto, sin este límite).
+ */
+function truncateForInt32Field(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return value;
+  return digits.length <= INT32_MAX_DIGITS ? digits : digits.slice(-INT32_MAX_DIGITS);
+}
+
+const DIGIT_CHARS = "0123456789";
+const UPPER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const LOWER_CHARS = "abcdefghijklmnopqrstuvwxyz";
+
+function randomFrom(chars: string, length: number): string {
+  let out = "";
+  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+/**
+ * Placeholders para campos que el archivador puede exigir como obligatorios
+ * pero para los que la app no tiene una fuente de datos real (decisión de
+ * negocio: mejor un valor aleatorio no vacío que arriesgar un rechazo por
+ * campo requerido faltante). Formato calcado del curl de referencia que sí
+ * funciona contra el archivador (ver ADR 0002).
+ */
+function randomPlaceholders() {
+  const today = nowFormatted().slice(0, 10).replace(/-/g, "");
+  return {
+    libroDeCaja: randomFrom(DIGIT_CHARS, 4),
+    identificadorSap: `SAP-${today}-${randomFrom(DIGIT_CHARS, 6)}`,
+    descripcionTipoDocumental: `Documento de Legalización ${randomFrom(UPPER_CHARS, 4)}`,
+    usuarioSap: randomFrom(UPPER_CHARS, 8),
+    codigoTipoDocumental: `FE${randomFrom(DIGIT_CHARS, 2)}`,
+    digitador: randomFrom(LOWER_CHARS, 6),
+    nroDocumento: randomFrom(DIGIT_CHARS, 9),
+  };
+}
+
+/**
+ * Construye los 16 campos del archivador. `NUMERO_DE_DOCUMENTO_CONTABLE` se
+ * recorta a 9 dígitos para no romper el tipo Int32 del archivador (ver ADR
+ * 0002). Los campos sin una fuente clara en la app (LIBRO_DE_CAJA,
+ * CODIGO_DEL_TIPO_DOCUMENTAL, DESCRIPCION_TIPO_DOCUMENTAL, DIGITADOR,
+ * USUARIO_SAP, NRODOCUMENTO, IDENTIFICADOR_SAP) se rellenan con datos
+ * aleatorios (no vacíos) por si el archivador los exige como obligatorios.
  */
 function buildCampos(input: ArchiveInput, byteLength: number): CampoArchivador[] {
   const numDoc = input.numeroDocumentoSap ?? "";
   const campo = (campo: string, valor: string): CampoArchivador => ({ campo, valor, tipoCampo: 0 });
+  const placeholders = randomPlaceholders();
 
   return [
-    campo("NUMERO_DE_DOCUMENTO_CONTABLE", numDoc),
+    campo("NUMERO_DE_DOCUMENTO_CONTABLE", truncateForInt32Field(numDoc)),
     campo("FECHA", input.fields.fecha ?? ""),
     campo("VALOR_DE_COMPROBANTE", input.fields.totalFactura ?? ""),
-    campo("LIBRO_DE_CAJA", ""),
+    campo("LIBRO_DE_CAJA", placeholders.libroDeCaja),
     campo("TIPO_DOCUMENTAL", "Factura"),
     campo("FECHA_MODIFICACION", nowFormatted()),
     campo("FILE_SIZE", String(byteLength)),
-    campo("IDENTIFICADOR_SAP", ""),
-    campo("DESCRIPCION_TIPO_DOCUMENTAL", ""),
+    campo("IDENTIFICADOR_SAP", placeholders.identificadorSap),
+    campo("DESCRIPCION_TIPO_DOCUMENTAL", placeholders.descripcionTipoDocumental),
     campo("CODIGO_SAP", input.ceco ?? ""),
     campo("NOMBRE_ARCHIVO", input.fileName),
-    campo("USUARIO_SAP", ""),
+    campo("USUARIO_SAP", placeholders.usuarioSap),
     campo("IDDOCUMENTO_SAP", numDoc),
-    campo("CODIGO_DEL_TIPO_DOCUMENTAL", ""),
-    campo("DIGITADOR", ""),
-    campo("NRODOCUMENTO", ""),
+    campo("CODIGO_DEL_TIPO_DOCUMENTAL", placeholders.codigoTipoDocumental),
+    campo("DIGITADOR", placeholders.digitador),
+    campo("NRODOCUMENTO", placeholders.nroDocumento),
   ];
 }
 

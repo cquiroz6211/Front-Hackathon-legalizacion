@@ -1,10 +1,10 @@
-# ADR 0002 — Archivado DocuWare: bugs de payload (resueltos) + campo Int32 que no soporta números de documento SAP reales
+# ADR 0002 — Archivado DocuWare: bugs de payload + campo Int32 que no soporta números de documento SAP reales
 
 ## Estado
 
-Parcialmente resuelto. Tres bugs reales de payload corregidos en código; queda
-un bloqueo pendiente de configuración del archivador en DocuWare QA (no es un
-bug nuestro).
+Resuelto (con workaround explícito para el campo Int32 — ver Problema 4 y
+Decisión #4). Verificado end-to-end contra QA con un número de documento SAP
+real.
 
 ## Contexto
 
@@ -62,13 +62,13 @@ primer `JSON.parse` da como resultado un `string`, se intenta parsear una
 segunda vez para desanidarlo. También se agregó `dwdocid` a `ID_KEYS` (la
 clave real que usa este endpoint, distinta de las genéricas que ya cubríamos).
 
-## Problema 4 (PENDIENTE, no es bug nuestro) — El campo `NUMERO_DE_DOCUMENTO_CONTABLE` está tipado como Int32 y no soporta números de documento SAP reales
+## Problema 4 (WORKAROUND aplicado) — El campo `NUMERO_DE_DOCUMENTO_CONTABLE` está tipado como Int32 y no soporta números de documento SAP reales
 
-Con los tres bugs anteriores resueltos, el archivado funciona end-to-end
-**solo si `numeroDocumentoSap` es un número pequeño** (probado con `"45000"`
+Con los tres bugs anteriores resueltos, el archivado funcionaba end-to-end
+**solo si `numeroDocumentoSap` era un número pequeño** (probado con `"45000"`
 → `codigoerror: 0`, `dwdocid` asignado). Con un número de documento SAP
 **real** (`"6000025360"`, el que efectivamente devuelve la contabilización en
-QA — ver ADR 0001), el archivado falla con:
+QA — ver ADR 0001), el archivado fallaba con:
 
 ```
 "No se pudo almacenar el documento. Mensaje Original: 422 Unprocessable Entity
@@ -80,37 +80,56 @@ small for an Int32.)"
 `6.000.025.360` supera el máximo de un entero de 32 bits (`2.147.483.647`).
 Los números de documento SAP reales observados en QA (`6000025359`,
 `6000025360`) están consistentemente en el rango de ~6 mil millones, es decir
-**este bloqueo ocurrirá en el 100% de los archivados reales**, no es un caso
+**este bloqueo ocurría en el 100% de los archivados reales**, no era un caso
 aislado. El campo está definido como `Int32` en el archivador de DocuWare del
-lado de Comfama; no es algo que el payload pueda evitar sin corromper el dato
-real (truncar o reformatear el número de documento SAP sería falsificar
-información contable).
+lado de Comfama, no es algo que el payload pudiera evitar sin tocar el valor.
+
+**Decisión de negocio explícita**: en vez de bloquear el archivado mientras
+Comfama ajusta el tipo del campo, se **recorta** `NUMERO_DE_DOCUMENTO_CONTABLE`
+a sus últimos 9 dígitos (`truncateForInt32Field`, `apps/api/src/lib/server/docuware.ts`)
+— 9 dígitos (`999.999.999`) siempre caben en un Int32. `IDDOCUMENTO_SAP` (texto,
+sin este límite) sigue recibiendo el número completo sin recortar, así que el
+número real de documento SAP no se pierde, solo queda truncado en el campo
+Int32 del archivador. Verificado con el número real `6000025360` → `codigoerror: 0`,
+`dwdocid` asignado.
+
+De paso, los campos que la app no tenía forma de poblar con datos reales
+(`LIBRO_DE_CAJA`, `CODIGO_DEL_TIPO_DOCUMENTAL`, `DESCRIPCION_TIPO_DOCUMENTAL`,
+`DIGITADOR`, `USUARIO_SAP`, `NRODOCUMENTO`, `IDENTIFICADOR_SAP`) pasaron de ir
+vacíos a rellenarse con **datos aleatorios no vacíos** (`randomPlaceholders`),
+por si el archivador los trata como obligatorios — decisión de negocio para
+priorizar velocidad de entrega (hackathon) sobre esperar la fuente real de
+cada campo.
 
 ## Decisión
 
 1. Los tres bugs de payload (1, 2 y 3) quedan **corregidos en código**.
-2. El Problema 4 **no se corrige en el código de la app**: cambiar el número
-   real de documento SAP para que quepa en un Int32 falsificaría el dato. Se
-   documenta acá para que el equipo de Comfama/DocuWare ajuste el tipo del
-   campo `NUMERO_DE_DOCUMENTO_CONTABLE` en el archivador (a texto o a un
-   entero de mayor precisión, p. ej. Int64/BigInt).
+2. El Problema 4 se resuelve con un **workaround explícito**: recorte a 9
+   dígitos de `NUMERO_DE_DOCUMENTO_CONTABLE` + placeholders aleatorios en los
+   campos sin fuente real. Es una decisión de negocio consciente (priorizar
+   shipeo rápido), no un descuido — el equipo de Comfama/DocuWare debería
+   igual ajustar el tipo del campo (a texto o Int64/BigInt) para no perder
+   dígitos del número real, y definir de dónde deberían salir los campos hoy
+   aleatorios.
 3. El archivado sigue siendo **no bloqueante**: si DocuWare rechaza el
-   documento por este motivo, la aprobación en SAP y el resto del flujo
-   continúan; el error queda visible en el historial (Gestor y `/history`)
-   con el mensaje real de DocuWare.
+   documento por cualquier otro motivo, la aprobación en SAP y el resto del
+   flujo continúan; el error queda visible en el historial (Gestor y
+   `/history`) con el mensaje real de DocuWare.
 
 ## Consecuencias
 
-- Mientras el campo siga tipado como Int32, **ningún archivado real
-  tendrá éxito** en QA — solo se pudo confirmar el resto del flujo con un
-  número de documento de prueba pequeño.
-- El equipo de integraciones/DocuWare debe confirmar el cambio de tipo del
-  campo `NUMERO_DE_DOCUMENTO_CONTABLE` (y verificar si `IDDOCUMENTO_SAP`, que
-  recibe el mismo valor, tiene el mismo problema — no se pudo confirmar
-  porque el fallo ocurre en el primer campo numérico de la lista).
-- Cuando se resuelva, reverificar el flujo completo contra QA con un número
-  de documento SAP real (`/gestor` → aprobar → contabilizar → archivar →
-  `dwdocid` real).
+- `NUMERO_DE_DOCUMENTO_CONTABLE` queda **truncado** en DocuWare (solo los
+  últimos 9 dígitos del número real de SAP); el número completo sigue
+  disponible en `IDDOCUMENTO_SAP` y en el propio store de la app
+  (`sapContabilizacion.numeroDocumento`), así que no hay pérdida de dato fuera
+  de ese campo específico del archivador.
+- Los 7 campos con placeholder aleatorio (ver arriba) no reflejan datos reales
+  de negocio; si en el futuro el archivador exige trazabilidad real en esos
+  campos (p. ej. auditorías), hay que reemplazar `randomPlaceholders()` por
+  fuentes reales (usuario SAP autenticado, digitador, tipo documental real, etc.).
+- El equipo de integraciones/DocuWare debería igual confirmar el cambio de
+  tipo del campo `NUMERO_DE_DOCUMENTO_CONTABLE` para eliminar la necesidad del
+  recorte.
 
 ## Referencias
 
