@@ -50,9 +50,50 @@ export function getDocumentFile(id: string): File | undefined {
   return fileBlobs.get(id);
 }
 
-/** Persiste el base64 del archivo (clave dedicada). Falla en silencio si excede cuota. */
+/**
+ * Persiste el base64 del archivo (clave dedicada). Si la cuota de
+ * localStorage está llena, libera primero los archivos de documentos ya
+ * decididos (aprobados/rechazados, ya no hace falta re-archivarlos) e
+ * intenta de nuevo antes de rendirse.
+ */
 export function setDocumentFileBase64(id: string, base64: string): void {
-  safeSet(`${FILE_KEY_PREFIX}${id}`, base64);
+  const key = `${FILE_KEY_PREFIX}${id}`;
+  if (trySet(key, base64)) return;
+  console.warn("[store] localStorage lleno, liberando archivos de legalizaciones ya decididas…");
+  evictDecidedDocumentFiles();
+  if (!trySet(key, base64)) {
+    console.warn(
+      `[store] No se pudo persistir el archivo de "${id}" (cuota de localStorage excedida).`,
+    );
+  }
+}
+
+/** Intenta escribir; devuelve `false` si falló (p. ej. `QuotaExceededError`). */
+function trySet(key: string, value: string): boolean {
+  if (!isBrowser()) return false;
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Borra el base64 persistido de documentos de legalizaciones ya aprobadas/rechazadas. */
+function evictDecidedDocumentFiles(): void {
+  const decidedDocIds = new Set<string>();
+  for (const leg of readLegalizations()) {
+    if (leg.status === "approved" || leg.status === "rejected") {
+      for (const docId of leg.expenseIds) decidedDocIds.add(docId);
+    }
+  }
+  for (const docId of decidedDocIds) {
+    try {
+      window.localStorage.removeItem(`${FILE_KEY_PREFIX}${docId}`);
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /** Lee el base64 persistido del archivo, o null si no está disponible. */

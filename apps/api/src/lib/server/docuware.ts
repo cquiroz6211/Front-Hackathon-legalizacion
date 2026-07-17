@@ -31,6 +31,8 @@ export interface ArchiveInput {
   ceco?: string;
   /** Número de documento de SAP (rellena NUMERO_DE_DOCUMENTO_CONTABLE + IDDOCUMENTO_SAP). */
   numeroDocumentoSap?: string | null;
+  /** Tipo de soporte (rellena TIPO_DOCUMENTAL). Por defecto "Factura". */
+  documentType?: string;
 }
 
 export interface ArchiveResult {
@@ -143,7 +145,7 @@ function buildCampos(input: ArchiveInput, byteLength: number): CampoArchivador[]
     campo("FECHA", input.fields.fecha ?? ""),
     campo("VALOR_DE_COMPROBANTE", parseAmountToInt(input.fields.totalFactura ?? "")),
     campo("LIBRO_DE_CAJA", placeholders.libroDeCaja),
-    campo("TIPO_DOCUMENTAL", "Factura"),
+    campo("TIPO_DOCUMENTAL", input.documentType ?? "Factura"),
     campo("FECHA_MODIFICACION", nowFormatted()),
     campo("FILE_SIZE", String(byteLength)),
     campo("IDENTIFICADOR_SAP", placeholders.identificadorSap),

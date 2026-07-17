@@ -75,6 +75,13 @@ function formatDateTime(iso: string): string {
   });
 }
 
+/** Etiqueta de TIPO_DOCUMENTAL en DocuWare según el propósito del soporte. */
+const DOCUMENT_TYPE_LABEL: Record<NonNullable<DocumentRecord["purpose"]>, string> = {
+  invoice: "Factura",
+  rut: "RUT",
+  "collection-account": "Cuenta de Cobro",
+};
+
 /**
  * Archiva un documento en DocuWare (gateway Comfama) con su base64 persistido
  * + el número de documento SAP recién obtenido. No lanza: devuelve siempre un
@@ -105,6 +112,7 @@ async function archiveDocToDocuware(
       fields: toBackendExtractedFields(doc.extracted ?? {}),
       ceco: doc.ceco,
       numeroDocumentoSap,
+      documentType: doc.purpose ? DOCUMENT_TYPE_LABEL[doc.purpose] : undefined,
     });
     return {
       at,

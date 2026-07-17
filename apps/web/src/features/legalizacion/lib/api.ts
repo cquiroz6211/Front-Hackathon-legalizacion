@@ -280,6 +280,8 @@ export interface ArchiveByBase64Input {
   fields: BackendExtractedFields;
   ceco?: string;
   numeroDocumentoSap?: string | null;
+  /** Tipo de soporte (rellena TIPO_DOCUMENTAL en DocuWare). Por defecto "Factura". */
+  documentType?: string;
 }
 
 /**
@@ -300,6 +302,7 @@ export async function archiveDocumentByBase64(
       fields: input.fields,
       ceco: input.ceco,
       numeroDocumentoSap: input.numeroDocumentoSap,
+      documentType: input.documentType,
     }),
   });
   return (await res.json()) as ArchiveResponse;

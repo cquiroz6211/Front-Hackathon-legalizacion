@@ -18,6 +18,7 @@ import {
   CONSUMPTION_LIMIT,
   getDocument,
   getDocumentFile,
+  getDocumentFileBase64,
   parseAmount,
   updateDocument,
   validatePropina,
@@ -88,22 +89,45 @@ const ReviewPageInner = () => {
   const searchParams = useSearchParams()[0];
   const docId = searchParams.get("doc") ?? null;
 
-  // El archivo real solo vive en memoria (ver `setDocumentFile` en
-  // UploadPage), indexado por id de documento. Si se entra a /review sin
-  // haber pasado por Upload en esta misma pestaña (link directo desde /me,
-  // /historial, o recarga de página), no hay File disponible y se cae al
-  // facsímil sintético (InvoicePreview).
+  // Preferimos el `File` en memoria (ver `setDocumentFile` en UploadPage):
+  // está disponible al instante, mientras que el base64 persistido en
+  // localStorage (`setDocumentFileBase64`) se escribe de forma asíncrona
+  // (FileReader) y puede no estar listo justo al llegar desde Upload. El
+  // base64 persistido sirve de respaldo para recargas o enlaces directos a
+  // `/review` (donde ya no hay `File` en memoria) — igual que en `/me` y
+  // `/gestor`. Si ninguno está disponible, se cae al facsímil sintético
+  // (InvoicePreview).
   const uploadedFile = useMemo(() => (docId ? (getDocumentFile(docId) ?? null) : null), [docId]);
-  const filePreviewUrl = useMemo(
+  const fileBase64 = useMemo(() => (docId ? getDocumentFileBase64(docId) : null), [docId]);
+  const doc0 = docId ? getDocument(docId) : null;
+  const fileType = uploadedFile?.type || doc0?.fileType || "application/octet-stream";
+  const blobPreviewUrl = useMemo(
     () => (uploadedFile ? URL.createObjectURL(uploadedFile) : null),
     [uploadedFile],
   );
   useEffect(() => {
     return () => {
-      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+      if (blobPreviewUrl) URL.revokeObjectURL(blobPreviewUrl);
     };
-  }, [filePreviewUrl]);
-  const isPdf = uploadedFile?.type === "application/pdf";
+  }, [blobPreviewUrl]);
+  const filePreviewUrl = useMemo(
+    () => blobPreviewUrl ?? (fileBase64 ? `data:${fileType};base64,${fileBase64}` : null),
+    [blobPreviewUrl, fileBase64, fileType],
+  );
+  const isPdf = fileType === "application/pdf";
+
+  const ZOOM_STEP = 0.25;
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 3;
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const handleZoomIn = () => setZoom((prev) => Math.min(ZOOM_MAX, +(prev + ZOOM_STEP).toFixed(2)));
+  const handleZoomOut = () => setZoom((prev) => Math.max(ZOOM_MIN, +(prev - ZOOM_STEP).toFixed(2)));
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
+  const previewTransformStyle = {
+    transform: `scale(${zoom}) rotate(${rotation}deg)`,
+    transformOrigin: "center",
+  };
 
   const initialDoc = useMemo<DocumentRecord | null>(() => {
     if (!docId) return null;
@@ -199,31 +223,50 @@ const ReviewPageInner = () => {
                 isIcon
                 size="sm"
                 aria-label="Acercar"
-                action={() => undefined}
+                action={handleZoomIn}
+                disabled={!filePreviewUrl || zoom >= ZOOM_MAX}
               >
                 <LuZoomIn className="w-4 h-4 text-secondary-600" />
               </Button>
-              <Button variant="ghost" isIcon size="sm" aria-label="Alejar" action={() => undefined}>
+              <Button
+                variant="ghost"
+                isIcon
+                size="sm"
+                aria-label="Alejar"
+                action={handleZoomOut}
+                disabled={!filePreviewUrl || zoom <= ZOOM_MIN}
+              >
                 <LuZoomOut className="w-4 h-4 text-secondary-600" />
               </Button>
-              <Button variant="ghost" isIcon size="sm" aria-label="Rotar" action={() => undefined}>
+              <Button
+                variant="ghost"
+                isIcon
+                size="sm"
+                aria-label="Rotar"
+                action={handleRotate}
+                disabled={!filePreviewUrl}
+              >
                 <LuRotateCw className="w-4 h-4 text-secondary-600" />
               </Button>
             </div>
           </div>
           {filePreviewUrl ? (
             isPdf ? (
-              <iframe
-                title={`Previsualización de ${doc?.fileName ?? "documento"}`}
-                src={filePreviewUrl}
-                className="flex-1 w-full bg-secondary-100"
-              />
+              <div className="flex-1 overflow-auto bg-secondary-100 p-4">
+                <iframe
+                  title={`Previsualización de ${doc?.fileName ?? "documento"}`}
+                  src={filePreviewUrl}
+                  className="h-full min-h-[600px] w-full border-0 bg-white shadow-lg transition-transform duration-150"
+                  style={previewTransformStyle}
+                />
+              </div>
             ) : (
-              <div className="flex-1 flex overflow-hidden bg-secondary-100 p-4">
+              <div className="flex-1 flex overflow-auto bg-secondary-100 p-4">
                 <img
                   src={filePreviewUrl}
                   alt={`Previsualización de ${doc?.fileName ?? "documento"}`}
-                  className="m-auto max-h-full max-w-full object-contain shadow-lg"
+                  className="m-auto max-h-full max-w-full object-contain shadow-lg transition-transform duration-150"
+                  style={previewTransformStyle}
                 />
               </div>
             )

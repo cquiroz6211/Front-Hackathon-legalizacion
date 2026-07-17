@@ -18,6 +18,7 @@ interface ArchiveBody {
   fields?: ExtractedFields;
   ceco?: string;
   numeroDocumentoSap?: string | null;
+  documentType?: string;
 }
 
 archiveRouter.post("/archive", async (req: Request, res: Response) => {
@@ -39,6 +40,7 @@ archiveRouter.post("/archive", async (req: Request, res: Response) => {
       fields: body.fields,
       ceco: body.ceco,
       numeroDocumentoSap: body.numeroDocumentoSap,
+      documentType: body.documentType,
     });
     console.log(`[archive] Terminado en ${Date.now() - startedAt}ms.`);
     return res.json({
