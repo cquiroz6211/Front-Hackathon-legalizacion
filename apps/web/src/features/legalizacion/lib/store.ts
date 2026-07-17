@@ -15,6 +15,7 @@ import type {
   DocumentRecord,
   DocumentPurpose,
   DocumentStatus,
+  DocuwareArchiveResult,
   DuplicateReason,
   ExpenseCategory,
   ExtractedFields,
@@ -29,13 +30,17 @@ const LEGALIZATIONS_KEY = "comfama.legalizacion.legalizations.v1";
 const ROLE_KEY = "comfama.legalizacion.role.v1";
 
 /**
- * Binarios de los archivos subidos, SOLO en memoria (no `localStorage`: no
- * queremos inflar el storage con base64 de PDFs/imágenes). Viven mientras dure
- * la pestaña; se usan para previsualizar el documento real en `/review`. Se
- * pierden al recargar la página, y en ese caso `/review` cae al facsímil
- * sintético (`InvoicePreview`).
+ * Binarios de los archivos subidos:
+ * - `fileBlobs` (memoria): el `File` original, para previsualizar en `/review`.
+ *   Se pierde al recargar la página.
+ * - `comfama.legalizacion.file.<id>` (localStorage): el base64 del archivo, en
+ *   una clave DEDICADA por documento (no dentro del array de documentos, para
+ *   que un archivo grande no corrompa el resto y para aislar errores de cuota).
+ *   Sobrevive a recargas y navegación entre roles, y es lo que el Gestor SAP
+ *   usa para archivar en DocuWare al aprobar.
  */
 const fileBlobs = new Map<string, File>();
+const FILE_KEY_PREFIX = "comfama.legalizacion.file.";
 
 export function setDocumentFile(id: string, file: File): void {
   fileBlobs.set(id, file);
@@ -43,6 +48,26 @@ export function setDocumentFile(id: string, file: File): void {
 
 export function getDocumentFile(id: string): File | undefined {
   return fileBlobs.get(id);
+}
+
+/** Persiste el base64 del archivo (clave dedicada). Falla en silencio si excede cuota. */
+export function setDocumentFileBase64(id: string, base64: string): void {
+  safeSet(`${FILE_KEY_PREFIX}${id}`, base64);
+}
+
+/** Lee el base64 persistido del archivo, o null si no está disponible. */
+export function getDocumentFileBase64(id: string): string | null {
+  return safeGet(`${FILE_KEY_PREFIX}${id}`);
+}
+
+function removeDocumentFile(id: string): void {
+  fileBlobs.delete(id);
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(`${FILE_KEY_PREFIX}${id}`);
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -223,6 +248,7 @@ export interface UpdateDocumentPatch {
   duplicateReason?: DuplicateReason;
   relatedDocumentId?: string;
   sapContabilizacion?: SapContabilizacionResult;
+  docuwareArchive?: DocuwareArchiveResult;
 }
 
 export function updateDocument(id: string, patch: UpdateDocumentPatch): DocumentRecord | undefined {
@@ -244,6 +270,7 @@ export function updateDocument(id: string, patch: UpdateDocumentPatch): Document
     ...(patch.sapContabilizacion !== undefined
       ? { sapContabilizacion: patch.sapContabilizacion }
       : {}),
+    ...(patch.docuwareArchive !== undefined ? { docuwareArchive: patch.docuwareArchive } : {}),
   };
   all[idx] = next;
   writeDocuments(all);
@@ -257,6 +284,7 @@ export function updateDocument(id: string, patch: UpdateDocumentPatch): Document
 export function deleteDocument(id: string): void {
   const all = readDocuments().filter((d) => d.id !== id);
   writeDocuments(all);
+  removeDocumentFile(id);
   notify();
   recomputeAllDuplicates();
 }

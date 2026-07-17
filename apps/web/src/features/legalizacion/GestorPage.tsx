@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  LuArchive,
   LuChevronDown,
   LuChevronRight,
   LuCircleAlert,
@@ -15,10 +16,16 @@ import { Alert, Button, Chip, Input, Typography, useToast } from "@comfama/comfa
 
 import { authRoleLabel, getSession, signOut } from "@/features/auth";
 
-import { getContabilizacion, postContabilizacion } from "./lib/api";
+import {
+  archiveDocumentByBase64,
+  getContabilizacion,
+  postContabilizacion,
+  toBackendExtractedFields,
+} from "./lib/api";
 import {
   approveLegalization,
   getDocument,
+  getDocumentFileBase64,
   getLegalizationAnticipo,
   getLegalizationDiferencia,
   getLegalizationExcess,
@@ -36,7 +43,7 @@ import {
   buildSapContabilizacionPayload,
   getSapEligibleDocuments,
 } from "./lib/sap";
-import type { DocumentRecord, Legalization } from "./types/document";
+import type { DocumentRecord, DocuwareArchiveResult, Legalization } from "./types/document";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
 function formatCurrencyARS(n: number): string {
@@ -65,6 +72,52 @@ function formatDateTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * Archiva un documento en DocuWare (gateway Comfama) con su base64 persistido
+ * + el número de documento SAP recién obtenido. No lanza: devuelve siempre un
+ * `DocuwareArchiveResult` para registrar el desenlace en el documento. Si el
+ * base64 no está disponible (subido en otra sesión/navegador o expulsado por
+ * cuota), reporta el faltante sin romper el flujo de aprobación.
+ */
+async function archiveDocToDocuware(
+  doc: DocumentRecord,
+  numeroDocumentoSap: string | null,
+): Promise<DocuwareArchiveResult> {
+  const at = new Date().toISOString();
+  const base64 = getDocumentFileBase64(doc.id);
+  if (!base64) {
+    return {
+      at,
+      ok: false,
+      documentId: null,
+      error: "Archivo no disponible para archivar en DocuWare (subido en otra sesión).",
+    };
+  }
+  try {
+    const res = await archiveDocumentByBase64({
+      fileBase64: base64,
+      fileName: doc.fileName,
+      fileType: doc.fileType,
+      fields: toBackendExtractedFields(doc.extracted ?? {}),
+      ceco: doc.ceco,
+      numeroDocumentoSap,
+    });
+    return {
+      at,
+      ok: res.ok,
+      documentId: res.documentId ?? null,
+      error: res.ok ? undefined : (res.error ?? "DocuWare rechazó el archivado."),
+    };
+  } catch (err) {
+    return {
+      at,
+      ok: false,
+      documentId: null,
+      error: err instanceof Error ? err.message : "Error de red al archivar en DocuWare.",
+    };
+  }
 }
 
 /** Legalizaciones ya decididas por el Gestor SAP (aprobadas o rechazadas), más recientes primero. */
@@ -131,6 +184,8 @@ const GestorPageInner = () => {
       const eligibleDocs = getSapEligibleDocuments(leg, getDocument);
       const failed: string[] = [];
       const numerosDocumento: string[] = [];
+      let archivedCount = 0;
+      const archiveIssues: string[] = [];
 
       for (const doc of eligibleDocs) {
         const numDocExterno = buildNumDocExterno(doc);
@@ -197,6 +252,21 @@ const GestorPageInner = () => {
           });
           if (!sapOk) failed.push(doc.fileName);
           else if (numeroDocumento) numerosDocumento.push(numeroDocumento);
+
+          // Archivado en DocuWare (NO bloqueante): una vez SAP contabilizó y
+          // asignó número, se archivan el gasto y su soporte relacionado
+          // (p.ej. el RUT de una cuenta de cobro) con ese número.
+          if (sapOk && numeroDocumento) {
+            const toArchive: DocumentRecord[] = [doc];
+            const related = doc.relatedDocumentId ? getDocument(doc.relatedDocumentId) : undefined;
+            if (related) toArchive.push(related);
+            for (const target of toArchive) {
+              const archive = await archiveDocToDocuware(target, numeroDocumento);
+              updateDocument(target.id, { docuwareArchive: archive });
+              if (archive.ok) archivedCount += 1;
+              else archiveIssues.push(target.fileName);
+            }
+          }
         } catch (err) {
           updateDocument(doc.id, {
             sapContabilizacion: {
@@ -225,13 +295,20 @@ const GestorPageInner = () => {
 
       const updated = approveLegalization(leg.id, gestorId);
       if (updated?.status === "approved") {
+        const sapMsg =
+          numerosDocumento.length > 0
+            ? `N° de documento SAP: ${numerosDocumento.join(", ")}.`
+            : "SAP aún no asignó número de documento; revisá el historial más tarde.";
+        const docuwareMsg =
+          archiveIssues.length > 0
+            ? ` Archivado en DocuWare con incidencias en: ${archiveIssues.join(", ")}.`
+            : archivedCount > 0
+              ? ` ${archivedCount} soporte${archivedCount === 1 ? "" : "s"} archivado${archivedCount === 1 ? "" : "s"} en DocuWare.`
+              : "";
         toast({
-          type: "success",
+          type: archiveIssues.length > 0 ? "warning" : "success",
           title: "Legalización aprobada",
-          description:
-            numerosDocumento.length > 0
-              ? `${leg.period} quedó aprobada. N° de documento SAP: ${numerosDocumento.join(", ")}.`
-              : `${leg.period} quedó aprobada y contabilizada en SAP. SAP aún no asignó número de documento; revisá el historial más tarde.`,
+          description: `${leg.period} quedó aprobada. ${sapMsg}${docuwareMsg}`,
           showIcon: true,
           showCloseButton: true,
         });
@@ -728,6 +805,7 @@ const GestorHistoryRow = ({ legalization, isExpanded, onToggle }: GestorHistoryR
               <ul className="space-y-2">
                 {docs.map((doc) => {
                   const sap = doc.sapContabilizacion;
+                  const dw = doc.docuwareArchive;
                   return (
                     <li
                       key={doc.id}
@@ -739,21 +817,42 @@ const GestorHistoryRow = ({ legalization, isExpanded, onToggle }: GestorHistoryR
                           {doc.fileName}
                         </p>
                       </div>
-                      {sap ? (
-                        sap.numeroDocumento ? (
-                          <Chip color="success" hoverable={false}>
-                            N° SAP: {sap.numeroDocumento}
-                          </Chip>
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        {sap ? (
+                          sap.numeroDocumento ? (
+                            <Chip color="success" hoverable={false}>
+                              N° SAP: {sap.numeroDocumento}
+                            </Chip>
+                          ) : (
+                            <Chip color="warning" hoverable={false}>
+                              {sap.error ?? "Sin número de documento SAP"}
+                            </Chip>
+                          )
                         ) : (
                           <Chip color="warning" hoverable={false}>
-                            {sap.error ?? "Sin número de documento SAP"}
+                            No se contabilizó en SAP
                           </Chip>
-                        )
-                      ) : (
-                        <Chip color="warning" hoverable={false}>
-                          No se contabilizó en SAP
-                        </Chip>
-                      )}
+                        )}
+                        {dw ? (
+                          dw.ok ? (
+                            <Chip color="success" hoverable={false}>
+                              <span className="inline-flex items-center gap-1">
+                                <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
+                                {dw.documentId
+                                  ? `DocuWare: ${dw.documentId}`
+                                  : "Archivado en DocuWare"}
+                              </span>
+                            </Chip>
+                          ) : (
+                            <Chip color="warning" hoverable={false}>
+                              <span className="inline-flex items-center gap-1">
+                                <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
+                                DocuWare: {dw.error ?? "no archivado"}
+                              </span>
+                            </Chip>
+                          )
+                        ) : null}
+                      </div>
                     </li>
                   );
                 })}

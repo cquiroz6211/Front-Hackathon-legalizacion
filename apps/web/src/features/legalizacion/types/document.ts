@@ -141,6 +141,16 @@ export interface SapContabilizacionResult {
   error?: string;
 }
 
+/** Resultado del archivado documental en DocuWare (gateway Comfama) al aprobar. */
+export interface DocuwareArchiveResult {
+  /** ISO 8601 del momento en que se archivó. */
+  at: string;
+  ok: boolean;
+  /** Id del documento archivado en DocuWare, si la respuesta lo trae. */
+  documentId: string | null;
+  error?: string;
+}
+
 export interface DocumentRecord {
   id: string;
   fileName: string;
@@ -157,4 +167,5 @@ export interface DocumentRecord {
   duplicateOf?: string[];
   duplicateReason?: DuplicateReason;
   sapContabilizacion?: SapContabilizacionResult;
+  docuwareArchive?: DocuwareArchiveResult;
 }

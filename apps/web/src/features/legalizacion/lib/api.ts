@@ -82,6 +82,33 @@ export function toExtractedFields(b: Partial<BackendExtractedFields>): Extracted
   };
 }
 
+/**
+ * Mapea el `ExtractedFields` del frontend al shape `BackendExtractedFields` que
+ * espera el backend (p.ej. para archivar en DocuWare). Es el inverso de
+ * `toExtractedFields`: `cuit` (frontend) vuelve a `nitCliente` (backend).
+ */
+export function toBackendExtractedFields(f: Partial<ExtractedFields>): BackendExtractedFields {
+  return {
+    fecha: f.fecha ?? "",
+    nroFactura: f.nroFactura ?? "",
+    cliente: f.cliente ?? "",
+    nitCliente: f.cuit ?? "",
+    proveedor: f.proveedor ?? "",
+    nit: f.nit ?? "",
+    direccion: f.direccion ?? "",
+    telefono: f.telefono ?? "",
+    departamento: f.departamento ?? "",
+    municipio: f.municipio ?? "",
+    iva19Base: f.iva19Base ?? "",
+    iva19Valor: f.iva19Valor ?? "",
+    iva5Base: f.iva5Base ?? "",
+    iva5Valor: f.iva5Valor ?? "",
+    iva0Base: f.iva0Base ?? "",
+    iva0Valor: f.iva0Valor ?? "",
+    totalFactura: f.totalFactura ?? "",
+  };
+}
+
 export interface HealthResponse {
   ok: boolean;
   services?: Record<string, boolean>;
@@ -244,6 +271,38 @@ export interface ArchiveOptions {
   numeroDocumentoSap?: string | null;
 }
 
+export interface ArchiveByBase64Input {
+  fileBase64: string;
+  fileName: string;
+  fileType: string;
+  fields: BackendExtractedFields;
+  ceco?: string;
+  numeroDocumentoSap?: string | null;
+}
+
+/**
+ * POST /archive con el base64 ya disponible (sin necesidad del objeto `File`).
+ * Lo usa el Gestor SAP al aprobar: el binario se lee del store persistido, no
+ * de un input de archivo. `archiveDocument(file, ...)` es un envoltorio de esta.
+ */
+export async function archiveDocumentByBase64(
+  input: ArchiveByBase64Input,
+): Promise<ArchiveResponse> {
+  const res = await fetch(apiUrl("/archive"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileBase64: input.fileBase64,
+      fileName: input.fileName,
+      fileType: input.fileType || "application/octet-stream",
+      fields: input.fields,
+      ceco: input.ceco,
+      numeroDocumentoSap: input.numeroDocumentoSap,
+    }),
+  });
+  return (await res.json()) as ArchiveResponse;
+}
+
 /** POST /archive — guarda el documento y sus datos en DocuWare (vía gateway Comfama). */
 export async function archiveDocument(
   file: File,
@@ -251,17 +310,12 @@ export async function archiveDocument(
   options?: ArchiveOptions,
 ): Promise<ArchiveResponse> {
   const fileBase64 = await fileToBase64(file);
-  const res = await fetch(apiUrl("/archive"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fileBase64,
-      fileName: file.name,
-      fileType: file.type || "application/octet-stream",
-      fields,
-      ceco: options?.ceco,
-      numeroDocumentoSap: options?.numeroDocumentoSap,
-    }),
+  return archiveDocumentByBase64({
+    fileBase64,
+    fileName: file.name,
+    fileType: file.type || "application/octet-stream",
+    fields,
+    ceco: options?.ceco,
+    numeroDocumentoSap: options?.numeroDocumentoSap,
   });
-  return (await res.json()) as ArchiveResponse;
 }

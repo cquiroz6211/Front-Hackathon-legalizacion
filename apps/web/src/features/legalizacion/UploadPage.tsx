@@ -20,9 +20,16 @@ import {
   getOrCreateDraftLegalization,
   getRole,
   setDocumentFile,
+  setDocumentFileBase64,
   updateDocument,
 } from "./lib/store";
-import { getCecos, validateDocument, processDocument, toExtractedFields } from "./lib/api";
+import {
+  fileToBase64,
+  getCecos,
+  validateDocument,
+  processDocument,
+  toExtractedFields,
+} from "./lib/api";
 import { EXPENSE_CATEGORY_LABELS } from "./lib/sap";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 import type { ExpenseCategory } from "./types/document";
@@ -38,6 +45,22 @@ interface CecoOption {
 const EXPENSE_CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = (
   Object.entries(EXPENSE_CATEGORY_LABELS) as [ExpenseCategory, string][]
 ).map(([value, label]) => ({ value, label }));
+
+/**
+ * Guarda el `File` en memoria (para previsualizar en `/review`) y persiste su
+ * base64 en el store (para que el Gestor SAP pueda archivarlo en DocuWare al
+ * aprobar, incluso tras recargar o cambiar de rol). Fire-and-forget: la lectura
+ * base64 es asíncrona pero no bloquea la navegación; si falla (cuota), el
+ * archivado en DocuWare lo reportará como archivo no disponible.
+ */
+async function persistDocumentFile(id: string, file: File): Promise<void> {
+  setDocumentFile(id, file);
+  try {
+    setDocumentFileBase64(id, await fileToBase64(file));
+  } catch {
+    // Ignorado: el archivado en DocuWare cae al fallback y reporta el faltante.
+  }
+}
 
 export const UploadPage = () => {
   const navigate = useNavigate();
@@ -182,7 +205,7 @@ export const UploadPage = () => {
                 ...(expenseCategory ? { expenseCategory } : {}),
               });
 
-              setDocumentFile(invoice.id, invoiceFile);
+              void persistDocumentFile(invoice.id, invoiceFile);
               addExpenseToLegalization(draft.id, invoice.id);
               setIsProcessing(false);
               navigate(`/review?doc=${encodeURIComponent(invoice.id)}`);
@@ -316,8 +339,8 @@ export const UploadPage = () => {
 
               updateDocument(rutDoc.id, { relatedDocumentId: accountDoc.id });
 
-              setDocumentFile(rutDoc.id, rutFile);
-              setDocumentFile(accountDoc.id, accountFile);
+              void persistDocumentFile(rutDoc.id, rutFile);
+              void persistDocumentFile(accountDoc.id, accountFile);
               addExpenseToLegalization(draft.id, rutDoc.id);
               addExpenseToLegalization(draft.id, accountDoc.id);
 

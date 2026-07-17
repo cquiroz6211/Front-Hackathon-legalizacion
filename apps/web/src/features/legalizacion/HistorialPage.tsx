@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  LuArchive,
   LuChevronDown,
   LuChevronRight,
   LuCircleAlert,
@@ -470,7 +471,7 @@ const LegalizationDetail = ({ legalization }: { legalization: Legalization }) =>
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {doc.sapContabilizacion?.numeroDocumento ? (
                     <Chip color="success" hoverable={false}>
                       N° SAP: {doc.sapContabilizacion.numeroDocumento}
@@ -478,6 +479,23 @@ const LegalizationDetail = ({ legalization }: { legalization: Legalization }) =>
                   ) : doc.sapContabilizacion ? (
                     <Chip color="warning" hoverable={false}>
                       {doc.sapContabilizacion.error ?? "Sin número SAP"}
+                    </Chip>
+                  ) : null}
+                  {doc.docuwareArchive?.ok ? (
+                    <Chip color="success" hoverable={false}>
+                      <span className="inline-flex items-center gap-1">
+                        <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
+                        {doc.docuwareArchive.documentId
+                          ? `DocuWare: ${doc.docuwareArchive.documentId}`
+                          : "Archivado en DocuWare"}
+                      </span>
+                    </Chip>
+                  ) : doc.docuwareArchive ? (
+                    <Chip color="warning" hoverable={false}>
+                      <span className="inline-flex items-center gap-1">
+                        <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
+                        DocuWare: no archivado
+                      </span>
                     </Chip>
                   ) : null}
                   <Link

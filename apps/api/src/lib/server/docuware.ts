@@ -138,6 +138,10 @@ export async function archiveDocument(input: ArchiveInput): Promise<ArchiveResul
   const tokenizer = comfamaSapTokenizerConfig();
   const bytes = Buffer.from(normalizeBase64(input.fileBase64), "base64");
   const campos = buildCampos(input, bytes.length);
+  console.log(
+    `[docuware] Archivando "${input.fileName}" (${bytes.length} bytes) en archivador ${cfg.archivadorId}.\n`,
+    JSON.stringify(campos, null, 2),
+  );
 
   const doRequest = (bearer: string) => {
     const form = new FormData();
@@ -162,6 +166,10 @@ export async function archiveDocument(input: ArchiveInput): Promise<ArchiveResul
   }
 
   const data = await parseBody(res);
+  console.log(
+    `[docuware] Respuesta (status ${res.status}):\n`,
+    JSON.stringify(data, null, 2).slice(0, 1000),
+  );
   if (!res.ok) {
     throw new Error(
       `DocuWare (Comfama): error ${res.status}. ${JSON.stringify(data).slice(0, 500)}`,
