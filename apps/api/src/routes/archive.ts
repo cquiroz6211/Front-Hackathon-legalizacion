@@ -1,9 +1,9 @@
 /**
  * POST /api/archive
  *
- * Archiva el documento y sus datos en DocuWare.
+ * Archiva el documento y sus datos en DocuWare (vía el gateway Comfama).
  *
- * Body JSON: { fileBase64, fileName, fileType?, fields, extraIndex? }
+ * Body JSON: { fileBase64, fileName, fileType?, fields, ceco?, numeroDocumentoSap? }
  */
 import { Router, type Request, type Response } from "express";
 import { archiveDocument } from "../lib/server/docuware";
@@ -16,7 +16,8 @@ interface ArchiveBody {
   fileName?: string;
   fileType?: string;
   fields?: ExtractedFields;
-  extraIndex?: Record<string, string>;
+  ceco?: string;
+  numeroDocumentoSap?: string | null;
 }
 
 archiveRouter.post("/archive", async (req: Request, res: Response) => {
@@ -29,17 +30,26 @@ archiveRouter.post("/archive", async (req: Request, res: Response) => {
     });
   }
 
+  const startedAt = Date.now();
   try {
     const result = await archiveDocument({
       fileBase64: body.fileBase64,
       fileName: body.fileName,
       fileType: body.fileType ?? "application/octet-stream",
       fields: body.fields,
-      extraIndex: body.extraIndex,
+      ceco: body.ceco,
+      numeroDocumentoSap: body.numeroDocumentoSap,
     });
-    return res.json({ ok: true, ...result });
+    console.log(`[archive] Terminado en ${Date.now() - startedAt}ms.`);
+    return res.json({
+      ok: true,
+      status: result.status,
+      documentId: result.documentId,
+      data: result.data,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
+    console.log(`[archive] Falló tras ${Date.now() - startedAt}ms: ${message}`);
     return res.status(502).json({ ok: false, error: message });
   }
 });

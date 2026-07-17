@@ -100,15 +100,15 @@ export function comfamaSapConfig() {
   };
 }
 
-/** DocuWare Platform REST API (archivado documental). */
-export function docuwareConfig() {
+/**
+ * DocuWare (archivado documental), vía el gateway de integraciones Comfama
+ * (no es el DocuWare Platform REST API directo). Reutiliza el tokenizer QA de
+ * SAP: mismo apikey, mismo dominio integracionesqa.comfama.com.
+ */
+export function comfamaDocuwareConfig() {
   return {
-    // p.ej. https://mi-host/DocuWare/Platform
-    baseUrl: required("DOCUWARE_BASE_URL").replace(/\/+$/, ""),
-    user: required("DOCUWARE_USER"),
-    password: required("DOCUWARE_PASSWORD"),
-    // GUID del archivador destino
-    fileCabinetId: required("DOCUWARE_FILE_CABINET_ID"),
-    organization: optional("DOCUWARE_ORGANIZATION", ""),
+    url: required("COMFAMA_DOCUWARE_URL"),
+    apiKey: required("COMFAMA_DOCUWARE_APIKEY"),
+    archivadorId: required("COMFAMA_DOCUWARE_ARCHIVADOR_ID"),
   };
 }
