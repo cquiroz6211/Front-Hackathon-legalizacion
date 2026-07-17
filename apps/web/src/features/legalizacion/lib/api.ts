@@ -260,6 +260,8 @@ export interface ArchiveResponse {
   ok: boolean;
   status?: number;
   documentId?: string | null;
+  /** URL para abrir el documento en DocuWare Web Client. */
+  documentUrl?: string | null;
   data?: unknown;
   error?: string;
 }

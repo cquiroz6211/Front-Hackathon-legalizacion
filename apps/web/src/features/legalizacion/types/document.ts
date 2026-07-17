@@ -148,6 +148,8 @@ export interface DocuwareArchiveResult {
   ok: boolean;
   /** Id del documento archivado en DocuWare, si la respuesta lo trae. */
   documentId: string | null;
+  /** URL para abrir el documento en DocuWare Web Client, si la respuesta la trae. */
+  documentUrl: string | null;
   error?: string;
 }
 

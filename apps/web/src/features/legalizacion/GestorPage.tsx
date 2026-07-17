@@ -92,6 +92,7 @@ async function archiveDocToDocuware(
       at,
       ok: false,
       documentId: null,
+      documentUrl: null,
       error: "Archivo no disponible para archivar en DocuWare (subido en otra sesión).",
     };
   }
@@ -108,6 +109,7 @@ async function archiveDocToDocuware(
       at,
       ok: res.ok,
       documentId: res.documentId ?? null,
+      documentUrl: res.documentUrl ?? null,
       error: res.ok ? undefined : (res.error ?? "DocuWare rechazó el archivado."),
     };
   } catch (err) {
@@ -115,6 +117,7 @@ async function archiveDocToDocuware(
       at,
       ok: false,
       documentId: null,
+      documentUrl: null,
       error: err instanceof Error ? err.message : "Error de red al archivar en DocuWare.",
     };
   }
@@ -835,14 +838,32 @@ const GestorHistoryRow = ({ legalization, isExpanded, onToggle }: GestorHistoryR
                         )}
                         {dw ? (
                           dw.ok ? (
-                            <Chip color="success" hoverable={false}>
-                              <span className="inline-flex items-center gap-1">
-                                <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
-                                {dw.documentId
-                                  ? `DocuWare: ${dw.documentId}`
-                                  : "Archivado en DocuWare"}
-                              </span>
-                            </Chip>
+                            dw.documentUrl ? (
+                              <a
+                                href={dw.documentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="no-underline"
+                              >
+                                <Chip color="success" hoverable>
+                                  <span className="inline-flex items-center gap-1">
+                                    <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {dw.documentId
+                                      ? `Ver en DocuWare (${dw.documentId})`
+                                      : "Ver en DocuWare"}
+                                  </span>
+                                </Chip>
+                              </a>
+                            ) : (
+                              <Chip color="success" hoverable={false}>
+                                <span className="inline-flex items-center gap-1">
+                                  <LuArchive className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {dw.documentId
+                                    ? `DocuWare: ${dw.documentId}`
+                                    : "Archivado en DocuWare"}
+                                </span>
+                              </Chip>
+                            )
                           ) : (
                             <Chip color="warning" hoverable={false}>
                               <span className="inline-flex items-center gap-1">

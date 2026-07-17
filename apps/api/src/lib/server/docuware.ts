@@ -38,6 +38,8 @@ export interface ArchiveResult {
   ok: boolean;
   /** Id del documento archivado, si se pudo identificar en la respuesta. */
   documentId: string | null;
+  /** URL para abrir el documento en DocuWare Web Client, si la respuesta la trae. */
+  documentUrl: string | null;
   data: unknown;
 }
 
@@ -157,6 +159,39 @@ function buildCampos(input: ArchiveInput, byteLength: number): CampoArchivador[]
 }
 
 const ID_KEYS = [/^id$/i, /^iddocumento$/i, /id.*documento/i, /documento.*id/i, /^dwdocid$/i];
+const URL_KEYS = [/^urldocumento$/i, /^url$/i];
+
+/** Busca (recursivamente) la URL de DocuWare Web Client en la respuesta (p.ej. `urlDocumento`). */
+function extractDocumentUrl(data: unknown): string | null {
+  const visit = (node: unknown): string | null => {
+    if (node === null || node === undefined) return null;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = visit(item);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof node === "object") {
+      const obj = node as Record<string, unknown>;
+      for (const [key, value] of Object.entries(obj)) {
+        if (
+          URL_KEYS.some((re) => re.test(key)) &&
+          typeof value === "string" &&
+          value.trim() !== ""
+        ) {
+          return value.trim();
+        }
+      }
+      for (const value of Object.values(obj)) {
+        const found = visit(value);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  return visit(data);
+}
 
 /** Busca (recursivamente) un identificador de documento en la respuesta. */
 function extractDocumentId(data: unknown): string | null {
@@ -262,5 +297,11 @@ export async function archiveDocument(input: ArchiveInput): Promise<ArchiveResul
     );
   }
 
-  return { status: res.status, ok: res.ok, documentId: extractDocumentId(data), data };
+  return {
+    status: res.status,
+    ok: res.ok,
+    documentId: extractDocumentId(data),
+    documentUrl: extractDocumentUrl(data),
+    data,
+  };
 }

@@ -45,6 +45,7 @@ archiveRouter.post("/archive", async (req: Request, res: Response) => {
       ok: true,
       status: result.status,
       documentId: result.documentId,
+      documentUrl: result.documentUrl,
       data: result.data,
     });
   } catch (err) {
