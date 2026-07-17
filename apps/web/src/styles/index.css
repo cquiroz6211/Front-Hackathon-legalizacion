@@ -1,7 +1,10 @@
+/* El CSS de la librería trae su propio @import de Google Fonts; debe ir
+   primero en el bundle final o PostCSS avisa "@import must precede all other
+   statements" (Tailwind, al expandirse, quedaría antes en el archivo). */
+@import "@comfama/comfama-ui-react/style.css";
 @import "tailwindcss";
 
 /* Sistema de diseño Comfama: tokens (theme) + estilos de la librería de componentes.
    El theme expone las variables CSS (--color-*, --radius-*, breakpoints) que
    consume Tailwind. Ver skill 01-cfm-design-tokens. */
 @import "@comfama/comfama-ui-react/theme.css";
-@import "@comfama/comfama-ui-react/style.css";

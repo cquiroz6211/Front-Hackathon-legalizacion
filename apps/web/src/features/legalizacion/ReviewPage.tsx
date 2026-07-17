@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   LuCircleAlert,
@@ -18,6 +18,7 @@ import { Alert, Button, DateField, Input, Typography } from "@comfama/comfama-ui
 import {
   CONSUMPTION_LIMIT,
   getDocument,
+  getDocumentFile,
   parseAmount,
   updateDocument,
   validatePropina,
@@ -87,6 +88,23 @@ const ReviewPageInner = () => {
   const navigate = useNavigate();
   const searchParams = useSearchParams()[0];
   const docId = searchParams.get("doc") ?? null;
+
+  // El archivo real solo vive en memoria (ver `setDocumentFile` en
+  // UploadPage), indexado por id de documento. Si se entra a /review sin
+  // haber pasado por Upload en esta misma pestaña (link directo desde /me,
+  // /historial, o recarga de página), no hay File disponible y se cae al
+  // facsímil sintético (InvoicePreview).
+  const uploadedFile = useMemo(() => (docId ? (getDocumentFile(docId) ?? null) : null), [docId]);
+  const filePreviewUrl = useMemo(
+    () => (uploadedFile ? URL.createObjectURL(uploadedFile) : null),
+    [uploadedFile],
+  );
+  useEffect(() => {
+    return () => {
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    };
+  }, [filePreviewUrl]);
+  const isPdf = uploadedFile?.type === "application/pdf";
 
   const initialDoc = useMemo<DocumentRecord | null>(() => {
     if (!docId) return null;
@@ -194,7 +212,25 @@ const ReviewPageInner = () => {
               </Button>
             </div>
           </div>
-          <InvoicePreview fields={fields} fileName={doc?.fileName} />
+          {filePreviewUrl ? (
+            isPdf ? (
+              <iframe
+                title={`Previsualización de ${doc?.fileName ?? "documento"}`}
+                src={filePreviewUrl}
+                className="flex-1 w-full bg-secondary-100"
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center overflow-auto bg-secondary-100 p-4">
+                <img
+                  src={filePreviewUrl}
+                  alt={`Previsualización de ${doc?.fileName ?? "documento"}`}
+                  className="max-h-full max-w-full object-contain shadow-lg"
+                />
+              </div>
+            )
+          ) : (
+            <InvoicePreview fields={fields} fileName={doc?.fileName} />
+          )}
         </section>
 
         <section className="w-full md:w-[480px] bg-white border border-secondary-400 rounded-2xl overflow-y-auto flex flex-col relative">
