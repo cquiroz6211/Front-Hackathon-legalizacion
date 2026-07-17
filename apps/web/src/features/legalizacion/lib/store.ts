@@ -16,15 +16,34 @@ import type {
   DocumentPurpose,
   DocumentStatus,
   DuplicateReason,
+  ExpenseCategory,
   ExtractedFields,
   GestorDecision,
   Legalization,
   Role,
+  SapContabilizacionResult,
 } from "../types/document";
 
 const DOCUMENTS_KEY = "comfama.legalizacion.documents.v1";
 const LEGALIZATIONS_KEY = "comfama.legalizacion.legalizations.v1";
 const ROLE_KEY = "comfama.legalizacion.role.v1";
+
+/**
+ * Binarios de los archivos subidos, SOLO en memoria (no `localStorage`: no
+ * queremos inflar el storage con base64 de PDFs/imágenes). Viven mientras dure
+ * la pestaña; se usan para previsualizar el documento real en `/review`. Se
+ * pierden al recargar la página, y en ese caso `/review` cae al facsímil
+ * sintético (`InvoicePreview`).
+ */
+const fileBlobs = new Map<string, File>();
+
+export function setDocumentFile(id: string, file: File): void {
+  fileBlobs.set(id, file);
+}
+
+export function getDocumentFile(id: string): File | undefined {
+  return fileBlobs.get(id);
+}
 
 /**
  * Anticipo demo sembrado por defecto al crear una legalización nueva.
@@ -167,6 +186,7 @@ export interface AddDocumentInput {
   role: Role;
   status?: DocumentStatus;
   ceco?: string;
+  expenseCategory?: ExpenseCategory;
   extracted?: ExtractedFields;
   purpose?: DocumentPurpose;
   relatedDocumentId?: string;
@@ -182,6 +202,7 @@ export function addDocument(input: AddDocumentInput): DocumentRecord {
     role: input.role,
     uploadedAt: new Date().toISOString(),
     ceco: input.ceco,
+    expenseCategory: input.expenseCategory,
     purpose: input.purpose,
     relatedDocumentId: input.relatedDocumentId,
     extracted: input.extracted,
@@ -196,10 +217,12 @@ export function addDocument(input: AddDocumentInput): DocumentRecord {
 export interface UpdateDocumentPatch {
   status?: DocumentStatus;
   ceco?: string;
+  expenseCategory?: ExpenseCategory;
   extracted?: ExtractedFields;
   duplicateOf?: string[];
   duplicateReason?: DuplicateReason;
   relatedDocumentId?: string;
+  sapContabilizacion?: SapContabilizacionResult;
 }
 
 export function updateDocument(id: string, patch: UpdateDocumentPatch): DocumentRecord | undefined {
@@ -211,11 +234,15 @@ export function updateDocument(id: string, patch: UpdateDocumentPatch): Document
     ...current,
     ...(patch.status !== undefined ? { status: patch.status } : {}),
     ...(patch.ceco !== undefined ? { ceco: patch.ceco } : {}),
+    ...(patch.expenseCategory !== undefined ? { expenseCategory: patch.expenseCategory } : {}),
     ...(patch.extracted !== undefined ? { extracted: patch.extracted } : {}),
     ...(patch.duplicateOf !== undefined ? { duplicateOf: patch.duplicateOf } : {}),
     ...(patch.duplicateReason !== undefined ? { duplicateReason: patch.duplicateReason } : {}),
     ...(patch.relatedDocumentId !== undefined
       ? { relatedDocumentId: patch.relatedDocumentId }
+      : {}),
+    ...(patch.sapContabilizacion !== undefined
+      ? { sapContabilizacion: patch.sapContabilizacion }
       : {}),
   };
   all[idx] = next;
@@ -429,6 +456,78 @@ export function submitLegalization(id: string): Legalization | undefined {
   writeLegalizations(all);
   notify();
   return next;
+}
+
+export interface SubmitSingleExpenseResult {
+  can: boolean;
+  blockers: string[];
+  legalization?: Legalization;
+}
+
+/** Bundle de ids a mover juntos: la factura sola, o el par RUT + cuenta de cobro. */
+function expenseBundle(docId: string): string[] {
+  const doc = getDocument(docId);
+  if (!doc) return [docId];
+  if ((doc.purpose === "rut" || doc.purpose === "collection-account") && doc.relatedDocumentId) {
+    return [docId, doc.relatedDocumentId];
+  }
+  return [docId];
+}
+
+/**
+ * Envía UNA factura (o su bundle RUT + cuenta de cobro) a revisión del Gestor
+ * SAP, dejando el resto de gastos del borrador para enviarse por separado
+ * (HU-0011: "una factura a la vez", no el paquete completo). Crea una nueva
+ * legalización `submitted` solo con esos gastos y los saca del borrador.
+ *
+ * Bloqueadores: mismos que `canSubmitToGestorSap` pero evaluados sobre el
+ * borrador completo (duplicados); si el docId queda entre los bloqueados, no
+ * se puede enviar todavía.
+ */
+export function submitSingleExpense(draftId: string, docId: string): SubmitSingleExpenseResult {
+  const all = readLegalizations();
+  const draftIdx = all.findIndex((l) => l.id === draftId);
+  if (draftIdx === -1) return { can: false, blockers: ["not-found"] };
+  const draft = all[draftIdx];
+  if (draft.status !== "draft") return { can: false, blockers: ["not-draft"] };
+  if (!draft.expenseIds.includes(docId)) return { can: false, blockers: ["not-in-draft"] };
+
+  const blocked = getBlockingDuplicates(draftId);
+  if (blocked.includes(docId)) return { can: false, blockers: ["duplicates"] };
+
+  const bundle = expenseBundle(docId).filter((id) => draft.expenseIds.includes(id));
+  const at = new Date().toISOString();
+
+  const submittedLeg: Legalization = {
+    id: generateId(),
+    period: draft.period,
+    status: "submitted",
+    expenseIds: bundle,
+    createdAt: at,
+    submittedAt: at,
+    anticipo: draft.anticipo,
+    auditLog: [
+      {
+        at,
+        fromStatus: "draft",
+        toStatus: "submitted",
+        reason: "submit-to-gestor-sap",
+        actor: "user",
+      },
+    ],
+  };
+
+  const nextDraft: Legalization = {
+    ...draft,
+    expenseIds: draft.expenseIds.filter((id) => !bundle.includes(id)),
+  };
+
+  all[draftIdx] = nextDraft;
+  all.push(submittedLeg);
+  writeLegalizations(all);
+  notify();
+  recomputeAllDuplicates();
+  return { can: true, blockers: [], legalization: submittedLeg };
 }
 
 export function getLegalizationTotal(id: string): number {
@@ -900,20 +999,18 @@ export interface SubmitToGestorSapResult {
 }
 
 /**
- * ¿Se puede enviar al Gestor SAP (HU-0011)? Bloqueadores: duplicados,
- * aprobación del líder pendiente por exceso y aprobación del líder pendiente por
- * tiempo. `can` = sin bloqueadores Y con al menos un gasto. `now` opcional para
- * tests deterministas.
+ * ¿Se puede enviar al Gestor SAP (HU-0011)? Único bloqueador: duplicados.
+ * `can` = sin duplicados Y con al menos un gasto. `now` se mantiene por
+ * compatibilidad de firma, aunque ya no se usa para bloquear el envío: en esta
+ * versión no hay rol líder — el exceso de límite (HU-0008) y fuera de tiempo
+ * (HU-0009) se muestran como alertas informativas en `/me`, pero el Gestor SAP
+ * es quien decide sobre ellas al aprobar/rechazar en `/gestor`.
  */
 export function canSubmitToGestorSap(id: string, now: Date = new Date()): SubmitToGestorSapResult {
+  void now;
   const blockers: string[] = [];
   const leg = getLegalization(id);
   if (getBlockingDuplicates(id).length > 0) blockers.push("duplicates");
-  const req = requiresLeaderApproval(id, now);
-  if (req.any && !isLeaderApproved(id, now)) {
-    if (req.excess) blockers.push("leader-approval:excess");
-    if (req.time) blockers.push("leader-approval:time");
-  }
   const can = blockers.length === 0 && (leg?.expenseIds.length ?? 0) > 0;
   return { can, blockers };
 }

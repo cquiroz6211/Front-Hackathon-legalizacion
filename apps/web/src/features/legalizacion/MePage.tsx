@@ -18,8 +18,6 @@ import {
 import { Alert, Button, Chip, Typography, useToast } from "@comfama/comfama-ui-react";
 
 import {
-  approveByLeader,
-  canSubmitToGestorSap,
   CONSUMPTION_LIMIT,
   deleteDocument,
   findLegalizationContainingDoc,
@@ -30,12 +28,10 @@ import {
   getLegalizationTimeStatus,
   getLegalizationTotal,
   getRole,
-  isLeaderApproved,
   listDocuments,
   listLegalizations,
   recomputeAllDuplicates,
-  requiresLeaderApproval,
-  submitLegalization,
+  submitSingleExpense,
   subscribe,
 } from "./lib/store";
 import type {
@@ -232,44 +228,32 @@ const MePageInner = () => {
     deleteDocument(doc.id);
   };
 
-  const handleSubmitLegalization = () => {
+  // HU-0011: solo se envía una factura (o su bundle RUT + cuenta de cobro) a
+  // la vez a revisión del Gestor SAP; no el borrador completo de un solo golpe.
+  const handleSubmitSingle = (doc: DocumentRecord) => {
     if (!draft) return;
-    // HU-0011: el envío al Gestor SAP valida duplicados y aprobación del líder.
-    const { can, blockers } = canSubmitToGestorSap(draft.id);
-    if (!can) {
+    const result = submitSingleExpense(draft.id, doc.id);
+    if (!result.can) {
+      const description =
+        result.blockers[0] === "duplicates"
+          ? "Este documento está marcado como duplicado; resolvé el duplicado antes de enviarlo."
+          : "No se pudo enviar este documento todavía.";
       toast({
         type: "warning",
         title: "No se puede enviar todavía",
-        description: blockerMessage(blockers),
+        description,
         showIcon: true,
         showCloseButton: true,
       });
       return;
     }
-    const updated = submitLegalization(draft.id);
-    if (updated && updated.status === "submitted") {
-      toast({
-        type: "success",
-        title: "Legalización enviada",
-        description: "Quedó en revisión por el Gestor SAP.",
-        showIcon: true,
-        showCloseButton: true,
-      });
-    }
-  };
-
-  const handleApproveByLeader = () => {
-    if (!draft) return;
-    const updated = approveByLeader(draft.id);
-    if (updated?.leaderApproval) {
-      toast({
-        type: "success",
-        title: "Aprobación del líder registrada",
-        description: "Ya podés enviar la legalización al Gestor SAP.",
-        showIcon: true,
-        showCloseButton: true,
-      });
-    }
+    toast({
+      type: "success",
+      title: "Factura enviada",
+      description: `"${doc.fileName}" quedó en revisión por el Gestor SAP.`,
+      showIcon: true,
+      showCloseButton: true,
+    });
   };
 
   const groupOrder: Group[] = ["Hoy", "Esta semana", "Anterior"];
@@ -325,8 +309,6 @@ const MePageInner = () => {
               draft={draft}
               confirmedCount={confirmedCount}
               totalInLegalization={totalInLegalization}
-              onSubmit={handleSubmitLegalization}
-              onApprove={handleApproveByLeader}
             />
           ) : (
             <EmptyLegalizationCard />
@@ -392,6 +374,14 @@ const MePageInner = () => {
                         const showRef = isHighlighted ? highlightRef : null;
                         const nit = doc.extracted?.nit ?? "—";
                         const valor = doc.extracted?.totalFactura ?? "—";
+                        // HU-0011: solo se envía a Gestor SAP una factura (o su
+                        // bundle RUT + cuenta de cobro) a la vez; el RUT no
+                        // tiene botón propio porque viaja con su cuenta de cobro.
+                        const canSubmitDoc =
+                          !!draft &&
+                          draft.expenseIds.includes(doc.id) &&
+                          doc.status === "processing" &&
+                          (doc.purpose === "invoice" || doc.purpose === "collection-account");
                         return (
                           <li
                             key={doc.id}
@@ -475,6 +465,14 @@ const MePageInner = () => {
                                 >
                                   Revisar
                                 </Link>
+                                {canSubmitDoc && (
+                                  <Button
+                                    className="h-9 px-4 min-h-0"
+                                    action={() => handleSubmitSingle(doc)}
+                                  >
+                                    Enviar a revisión
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   isIcon
@@ -700,40 +698,18 @@ const PreviewRow = ({
   </div>
 );
 
-/** Traduce los bloqueadores de `canSubmitToGestorSap` a un mensaje legible. */
-function blockerMessage(blockers: string[]): string {
-  const parts: string[] = [];
-  if (blockers.includes("duplicates")) parts.push("hay facturas duplicadas");
-  if (blockers.includes("leader-approval:excess"))
-    parts.push("falta aprobación del líder por exceso de límite");
-  if (blockers.includes("leader-approval:time"))
-    parts.push("falta aprobación del líder por fuera de tiempo");
-  if (parts.length === 0) return "Revisá la legalización antes de enviar.";
-  const text = parts.join(" y ");
-  return `No se puede enviar: ${text}.`;
-}
-
 const ActiveLegalizationCard = ({
   draft,
   confirmedCount,
   totalInLegalization,
-  onSubmit,
-  onApprove,
 }: {
   draft: Legalization;
   confirmedCount: number;
   totalInLegalization: number;
-  onSubmit: () => void;
-  onApprove: () => void;
 }) => {
   const total = getLegalizationTotal(draft.id);
   const excess = getLegalizationExcess(draft.id);
   const timeStatus = getLegalizationTimeStatus(draft.id);
-  const req = requiresLeaderApproval(draft.id);
-  const approved = isLeaderApproved(draft.id);
-  const submit = canSubmitToGestorSap(draft.id);
-  const canSubmit = submit.can;
-  const hasExpenses = confirmedCount > 0;
   const caption = `${confirmedCount} gasto${confirmedCount === 1 ? "" : "s"} confirmado${confirmedCount === 1 ? "" : "s"} de ${totalInLegalization} en la legalización`;
 
   return (
@@ -764,80 +740,42 @@ const ActiveLegalizationCard = ({
         </Typography>
       </div>
 
-      {/* HU-0008 — exceso de límite (alerta NO bloqueante para guardar) */}
+      {/* HU-0008 — exceso de límite (alerta informativa; la decide el Gestor SAP) */}
       {excess.hasExcess ? (
         <div className="mt-4">
           <Alert
             variant="filled"
             type="warning"
             title="Exceso de límite de consumo"
-            description={`${excess.exceededDocIds.length} factura${excess.exceededDocIds.length === 1 ? "" : "s"} supera${excess.exceededDocIds.length === 1 ? "" : "n"} el tope de ${formatCurrencyARS(CONSUMPTION_LIMIT)}. Excedido: ${formatCurrencyARS(excess.totalExcess)}. Podés guardar; para enviar requiere aprobación del líder.`}
+            description={`${excess.exceededDocIds.length} factura${excess.exceededDocIds.length === 1 ? "" : "s"} supera${excess.exceededDocIds.length === 1 ? "" : "n"} el tope de ${formatCurrencyARS(CONSUMPTION_LIMIT)}. Excedido: ${formatCurrencyARS(excess.totalExcess)}. Quedará señalada para que el Gestor SAP la revise.`}
             showIcon
           />
         </div>
       ) : null}
 
-      {/* HU-0009 — fuera de tiempo (alerta NO bloqueante para guardar) */}
+      {/* HU-0009 — fuera de tiempo (alerta informativa; la decide el Gestor SAP) */}
       {timeStatus.outOfTime ? (
         <div className="mt-4">
           <Alert
             variant="filled"
             type="warning"
             title="Legalización fuera de tiempo"
-            description={`Han pasado ${timeStatus.daysElapsed} días hábiles desde el consumo (máximo ${5}). Podés guardar; para enviar requiere aprobación del líder.`}
+            description={`Han pasado ${timeStatus.daysElapsed} días hábiles desde el consumo (máximo ${5}). Quedará señalada para que el Gestor SAP la revise.`}
             showIcon
           />
         </div>
       ) : null}
 
-      {/* HU-0008/0009 — aprobación del líder (simulada) cuando hay motivos */}
-      {req.any ? (
-        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-secondary-400 bg-secondary-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Typography
-              variant="body2"
-              className="font-bold uppercase tracking-widest text-secondary-900"
-            >
-              Aprobación del líder
-            </Typography>
-            <Typography variant="body2" className="text-secondary-600">
-              {approved
-                ? `Aprobada el ${formatDate(draft.leaderApproval?.approvedAt ?? "")}`
-                : "Pendiente de aprobación"}
-            </Typography>
-          </div>
-          {approved ? (
-            <Chip color="success" hoverable={false}>
-              <span className="inline-flex items-center gap-1">
-                <LuCircleCheck className="w-3 h-3" aria-hidden="true" />
-                Aprobada por el líder
-              </span>
-            </Chip>
-          ) : (
-            <Button variant="contained" action={onApprove} className="min-h-11">
-              <LuCircleCheck className="w-4 h-4 mr-2" />
-              Aprobar como líder
-            </Button>
-          )}
-        </div>
-      ) : null}
-
-      {/* HU-0011 — bloqueos del envío al Gestor SAP */}
-      {!canSubmit && hasExpenses ? (
-        <div className="mt-4">
-          <Alert
-            variant="outline"
-            type="info"
-            title="El envío está bloqueado"
-            description={blockerMessage(submit.blockers)}
-            showIcon
-          />
-        </div>
-      ) : null}
-
-      <Button disabled={!canSubmit} className="mt-6 w-full min-h-12" action={onSubmit}>
-        Enviar a Gestor SAP
-      </Button>
+      {/* HU-0011 — el envío es por factura, no por paquete: ver el botón
+          "Enviar a revisión" en cada fila de la lista de documentos. */}
+      <Alert
+        variant="outline"
+        type="info"
+        className="mt-6"
+        title="Envío por factura"
+        description="Cada factura o cuenta de cobro se envía a revisión del Gestor SAP por separado, desde su fila en la lista de documentos."
+        showIcon
+      />
     </section>
   );
 };

@@ -93,6 +93,7 @@ export {
   validateDocument,
 } from "./lib/api";
 export type {
+  ArchiveOptions,
   ArchiveResponse,
   BackendExtractedFields,
   CecosResponse,

@@ -203,6 +203,10 @@ export interface SapResponse {
   ok: boolean;
   sapStatus?: number;
   numeroDocumento?: string | null;
+  /** Estado del intento más reciente en SAP (p.ej. "OK", "EI"). Solo en GET. */
+  sapEstado?: string | null;
+  /** Mensajes de error (tipo "E") del intento más reciente en SAP. Solo en GET. */
+  sapErrores?: string[];
   data?: unknown;
   error?: string;
 }
@@ -227,16 +231,24 @@ export async function getContabilizacion(numDocExterno: string): Promise<SapResp
 
 export interface ArchiveResponse {
   ok: boolean;
-  documentId?: number | string;
-  fileCabinetId?: string;
+  status?: number;
+  documentId?: string | null;
+  data?: unknown;
   error?: string;
 }
 
-/** POST /archive — guarda el documento y sus datos en DocuWare. */
+export interface ArchiveOptions {
+  /** CECO elegido en el front (rellena CODIGO_SAP en el archivador). */
+  ceco?: string;
+  /** Número de documento de SAP (rellena NUMERO_DE_DOCUMENTO_CONTABLE + IDDOCUMENTO_SAP). */
+  numeroDocumentoSap?: string | null;
+}
+
+/** POST /archive — guarda el documento y sus datos en DocuWare (vía gateway Comfama). */
 export async function archiveDocument(
   file: File,
   fields: BackendExtractedFields,
-  extraIndex?: Record<string, string>,
+  options?: ArchiveOptions,
 ): Promise<ArchiveResponse> {
   const fileBase64 = await fileToBase64(file);
   const res = await fetch(apiUrl("/archive"), {
@@ -247,7 +259,8 @@ export async function archiveDocument(
       fileName: file.name,
       fileType: file.type || "application/octet-stream",
       fields,
-      extraIndex,
+      ceco: options?.ceco,
+      numeroDocumentoSap: options?.numeroDocumentoSap,
     }),
   });
   return (await res.json()) as ArchiveResponse;

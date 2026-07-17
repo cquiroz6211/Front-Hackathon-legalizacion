@@ -124,6 +124,23 @@ export type DuplicateReason = "same-legalization" | "history" | "indeterminate";
 
 export type DocumentPurpose = "invoice" | "rut" | "collection-account";
 
+/** Categoría de gasto de viaje (define la cuenta contable SAP al contabilizar). */
+export type ExpenseCategory = "alimentacion" | "alojamiento" | "otros";
+
+/** Resultado de la contabilización en SAP (Legados FI) al aprobar en Gestor SAP. */
+export interface SapContabilizacionResult {
+  /** ISO 8601 del momento en que se contabilizó. */
+  at: string;
+  ok: boolean;
+  /** Código HTTP devuelto por SAP. */
+  status: number;
+  /** `num_doc_externo` enviado, útil para volver a consultar `/contabilizacion`. */
+  numDocExterno: string;
+  /** Número de documento SAP extraído de la respuesta, si se pudo identificar. */
+  numeroDocumento: string | null;
+  error?: string;
+}
+
 export interface DocumentRecord {
   id: string;
   fileName: string;
@@ -133,9 +150,11 @@ export interface DocumentRecord {
   role: Role;
   uploadedAt: string;
   ceco?: string;
+  expenseCategory?: ExpenseCategory;
   purpose?: DocumentPurpose;
   relatedDocumentId?: string;
   extracted?: ExtractedFields;
   duplicateOf?: string[];
   duplicateReason?: DuplicateReason;
+  sapContabilizacion?: SapContabilizacionResult;
 }

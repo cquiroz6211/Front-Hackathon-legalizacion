@@ -353,11 +353,16 @@ const HistorialRow = ({ legalization, isExpanded, onToggle }: HistorialRowProps)
           <Chip color={STATUS_COLOR[legalization.status]} hoverable={false}>
             {STATUS_LABEL[legalization.status]}
           </Chip>
-          {legalization.leaderApproval ? (
-            <Chip color="success" hoverable={false}>
+          {legalization.gestorDecision ? (
+            <Chip
+              color={legalization.gestorDecision.decision === "approved" ? "success" : "error"}
+              hoverable={false}
+            >
               <span className="inline-flex items-center gap-1">
                 <LuShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                Aprobación líder
+                {legalization.gestorDecision.decision === "approved"
+                  ? "Aprobado por Gestor SAP"
+                  : "Rechazado por Gestor SAP"}
               </span>
             </Chip>
           ) : null}
@@ -426,6 +431,16 @@ const LegalizationDetail = ({ legalization }: { legalization: Legalization }) =>
         />
       </div>
 
+      {legalization.status === "rejected" && legalization.gestorDecision?.reason ? (
+        <Alert
+          variant="outline"
+          type="error"
+          title="Motivo del rechazo (Gestor SAP)"
+          description={legalization.gestorDecision.reason}
+          showIcon
+        />
+      ) : null}
+
       <div className="space-y-3">
         <Typography
           variant="body2"
@@ -455,12 +470,23 @@ const LegalizationDetail = ({ legalization }: { legalization: Legalization }) =>
                     </p>
                   </div>
                 </div>
-                <Link
-                  to={`/review?doc=${encodeURIComponent(doc.id)}`}
-                  className="inline-flex h-9 items-center justify-center rounded-full border border-secondary-400 bg-white px-4 text-xs font-semibold uppercase tracking-widest text-secondary-900 hover:bg-secondary-100"
-                >
-                  Revisar
-                </Link>
+                <div className="flex items-center gap-2">
+                  {doc.sapContabilizacion?.numeroDocumento ? (
+                    <Chip color="success" hoverable={false}>
+                      N° SAP: {doc.sapContabilizacion.numeroDocumento}
+                    </Chip>
+                  ) : doc.sapContabilizacion ? (
+                    <Chip color="warning" hoverable={false}>
+                      {doc.sapContabilizacion.error ?? "Sin número SAP"}
+                    </Chip>
+                  ) : null}
+                  <Link
+                    to={`/review?doc=${encodeURIComponent(doc.id)}`}
+                    className="inline-flex h-9 items-center justify-center rounded-full border border-secondary-400 bg-white px-4 text-xs font-semibold uppercase tracking-widest text-secondary-900 hover:bg-secondary-100"
+                  >
+                    Revisar
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

@@ -31,25 +31,46 @@ async function parseBody(res: Response): Promise<unknown> {
 }
 
 /**
- * Busca (recursivamente) el número de documento SAP en la respuesta.
- * Como el shape exacto no está fijado, prueba claves comunes: numero_documento,
- * num_documento, num_doc, belnr, documento, doc_number, etc. Ajusta la lista
- * cuando conozcas el nombre real del campo.
+ * Shape real observado de `GET /FI/Contabilizacion?NUM_DOC_EXTERNO=...`:
+ *
+ *   { documentos: [
+ *       { req_id, num_doc_ext, status: "OK"|"EI"|..., num_doc?, fecha_creacion, mensajes?: [{tipo:"E"|"W", texto}] },
+ *       ... // intentos anteriores, MÁS RECIENTE PRIMERO
+ *   ]}
+ *
+ * Cada `num_doc_externo` puede tener varios intentos (reprocesos); solo el/los
+ * que tengan `status: "OK"` traen `num_doc` (el número de documento SAP real).
+ * El `POST` de creación es un shape DISTINTO (`{ req_id, mensajes }`, sin
+ * `documentos`) — normalmente no trae número de documento todavía.
  */
+interface SapConsultaIntento {
+  req_id?: string;
+  num_doc_ext?: string;
+  status?: string;
+  num_doc?: string;
+  fecha_creacion?: number;
+  mensajes?: { tipo?: string; texto?: string }[];
+}
+
+/** Claves que SÍ identifican el número de documento SAP (exactas, sin "ext"). */
 const DOC_NUMBER_KEYS = [
+  /^num_doc$/i,
   /^numero_documento$/i,
   /^num_documento$/i,
-  /^num_doc$/i,
   /^numero_doc$/i,
   /^n_documento$/i,
   /^belnr$/i,
   /^doc_?number$/i,
   /^documento$/i,
-  /num.*doc/i,
-  /doc.*num/i,
 ];
 
-export function extractNumeroDocumento(data: unknown): string | null {
+/**
+ * Búsqueda recursiva genérica (fallback para shapes no documentados). Excluye
+ * cualquier clave que contenga "ext" (p.ej. `num_doc_ext`, `numDocExterno`)
+ * para no confundir la referencia externa que NOSOTROS enviamos con el número
+ * de documento que asigna SAP.
+ */
+function genericSearch(data: unknown): string | null {
   const visit = (node: unknown): string | null => {
     if (node === null || node === undefined) return null;
     if (Array.isArray(node)) {
@@ -63,6 +84,7 @@ export function extractNumeroDocumento(data: unknown): string | null {
       const obj = node as Record<string, unknown>;
       for (const [key, value] of Object.entries(obj)) {
         if (
+          !/ext/i.test(key) &&
           DOC_NUMBER_KEYS.some((re) => re.test(key)) &&
           value !== null &&
           value !== undefined &&
@@ -72,7 +94,6 @@ export function extractNumeroDocumento(data: unknown): string | null {
           return String(value).trim();
         }
       }
-      // no encontrado en este nivel: baja recursivo
       for (const value of Object.values(obj)) {
         const found = visit(value);
         if (found) return found;
@@ -83,9 +104,42 @@ export function extractNumeroDocumento(data: unknown): string | null {
   return visit(data);
 }
 
+export interface SapConsultaResumen {
+  numeroDocumento: string | null;
+  /** `status` del intento más reciente ("OK", "EI", ...), o null si no hay historial. */
+  status: string | null;
+  /** Mensajes de error (`tipo: "E"`) del intento más reciente. */
+  errorMessages: string[];
+}
+
+/** Interpreta la respuesta de `GET /contabilizacion`: número de documento + errores del intento más reciente. */
+export function interpretSapConsulta(data: unknown): SapConsultaResumen {
+  const documentos = (data as { documentos?: unknown })?.documentos;
+  if (!Array.isArray(documentos) || documentos.length === 0) {
+    return { numeroDocumento: genericSearch(data), status: null, errorMessages: [] };
+  }
+  const intentos = documentos as SapConsultaIntento[];
+  const latest = intentos[0];
+  const ok = intentos.find((d) => d.status === "OK" && d.num_doc);
+  const errorMessages = (latest.mensajes ?? [])
+    .filter((m) => m.tipo === "E" && m.texto)
+    .map((m) => m.texto as string);
+  return {
+    numeroDocumento: ok?.num_doc ?? null,
+    status: latest.status ?? null,
+    errorMessages,
+  };
+}
+
+/** Compatibilidad: solo el número de documento (usa `interpretSapConsulta` para más detalle). */
+export function extractNumeroDocumento(data: unknown): string | null {
+  return interpretSapConsulta(data).numeroDocumento;
+}
+
 /** Contabiliza (POST). `payload` es el documento SAP completo (pass-through). */
 export async function postContabilizacion(payload: unknown): Promise<SapResult> {
   const cfg = comfamaSapConfig();
+  console.log("[postContabilizacion] Payload enviado a SAP:\n", JSON.stringify(payload, null, 2));
 
   const doRequest = (bearer: string) =>
     fetch(cfg.sapUrl, {
@@ -107,12 +161,18 @@ export async function postContabilizacion(payload: unknown): Promise<SapResult> 
     res = await doRequest(await getAccessToken(true, tokenizer));
   }
 
-  return { status: res.status, ok: res.ok, data: await parseBody(res) };
+  const result: SapResult = { status: res.status, ok: res.ok, data: await parseBody(res) };
+  console.log(
+    `[postContabilizacion] Respuesta de SAP (status ${result.status}):\n`,
+    JSON.stringify(result.data, null, 2),
+  );
+  return result;
 }
 
 /** Consulta el estado de una contabilización por su número de documento externo. */
 export async function getContabilizacion(numDocExterno: string): Promise<SapResult> {
   const cfg = comfamaSapConfig();
+  console.log(`[getContabilizacion] Consultando num_doc_externo="${numDocExterno}"`);
   const url = `${cfg.sapUrl}?NUM_DOC_EXTERNO=${encodeURIComponent(numDocExterno)}`;
 
   const doRequest = (bearer: string) =>
@@ -132,5 +192,10 @@ export async function getContabilizacion(numDocExterno: string): Promise<SapResu
     res = await doRequest(await getAccessToken(true, tokenizer));
   }
 
-  return { status: res.status, ok: res.ok, data: await parseBody(res) };
+  const result: SapResult = { status: res.status, ok: res.ok, data: await parseBody(res) };
+  console.log(
+    `[getContabilizacion] Respuesta de SAP (status ${result.status}):\n`,
+    JSON.stringify(result.data, null, 2),
+  );
+  return result;
 }

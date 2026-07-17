@@ -7,18 +7,32 @@
  * La respuesta incluye `sapStatus` (código HTTP que devolvió SAP) y `data`.
  */
 import { Router, type Request, type Response } from "express";
-import { postContabilizacion, getContabilizacion, extractNumeroDocumento } from "../lib/server/sap";
+import {
+  postContabilizacion,
+  getContabilizacion,
+  extractNumeroDocumento,
+  interpretSapConsulta,
+} from "../lib/server/sap";
 
 export const contabilizacionRouter = Router();
 
 contabilizacionRouter.post("/contabilizacion", async (req: Request, res: Response) => {
+  const startedAt = Date.now();
   try {
     const result = await postContabilizacion(req.body);
-    return res
-      .status(result.ok ? 200 : 502)
-      .json({ ok: result.ok, sapStatus: result.status, data: result.data });
+    console.log(`[contabilizacion] POST terminado en ${Date.now() - startedAt}ms.`);
+    return res.status(result.ok ? 200 : 502).json({
+      ok: result.ok,
+      sapStatus: result.status,
+      // SAP no siempre devuelve el número de documento en el POST (a veces
+      // solo confirma con `req_id` + advertencias); si no viene, el front debe
+      // consultarlo después con GET /contabilizacion?numDocExterno=...
+      numeroDocumento: extractNumeroDocumento(result.data),
+      data: result.data,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
+    console.log(`[contabilizacion] POST falló tras ${Date.now() - startedAt}ms: ${message}`);
     return res.status(502).json({ ok: false, error: message });
   }
 });
@@ -31,16 +45,22 @@ contabilizacionRouter.get("/contabilizacion", async (req: Request, res: Response
     return res.status(400).json({ ok: false, error: 'Falta el query param "numDocExterno".' });
   }
 
+  const startedAt = Date.now();
   try {
     const result = await getContabilizacion(numDocExterno);
+    const resumen = interpretSapConsulta(result.data);
+    console.log(`[contabilizacion] GET terminado en ${Date.now() - startedAt}ms.`);
     return res.status(result.ok ? 200 : 502).json({
       ok: result.ok,
       sapStatus: result.status,
-      numeroDocumento: extractNumeroDocumento(result.data),
+      numeroDocumento: resumen.numeroDocumento,
+      sapEstado: resumen.status,
+      sapErrores: resumen.errorMessages,
       data: result.data,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido.";
+    console.log(`[contabilizacion] GET falló tras ${Date.now() - startedAt}ms: ${message}`);
     return res.status(502).json({ ok: false, error: message });
   }
 });

@@ -19,10 +19,13 @@ import {
   addExpenseToLegalization,
   getOrCreateDraftLegalization,
   getRole,
+  setDocumentFile,
   updateDocument,
 } from "./lib/store";
 import { getCecos, validateDocument, processDocument, toExtractedFields } from "./lib/api";
+import { EXPENSE_CATEGORY_LABELS } from "./lib/sap";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
+import type { ExpenseCategory } from "./types/document";
 
 const ACCEPTED_TYPES = ".pdf,.jpg,.jpeg,.png";
 type UploadFlow = "invoice" | "collection-account";
@@ -32,6 +35,10 @@ interface CecoOption {
   label: string;
 }
 
+const EXPENSE_CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = (
+  Object.entries(EXPENSE_CATEGORY_LABELS) as [ExpenseCategory, string][]
+).map(([value, label]) => ({ value, label }));
+
 export const UploadPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -40,6 +47,7 @@ export const UploadPage = () => {
   const [rutFile, setRutFile] = useState<File | null>(null);
   const [accountFile, setAccountFile] = useState<File | null>(null);
   const [ceco, setCeco] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | "">("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [cecoOptions, setCecoOptions] = useState<CecoOption[]>([]);
   const [cecosLoading, setCecosLoading] = useState(false);
@@ -171,8 +179,10 @@ export const UploadPage = () => {
                 purpose: "invoice",
                 extracted: mappedFields,
                 ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
+                ...(expenseCategory ? { expenseCategory } : {}),
               });
 
+              setDocumentFile(invoice.id, invoiceFile);
               addExpenseToLegalization(draft.id, invoice.id);
               setIsProcessing(false);
               navigate(`/review?doc=${encodeURIComponent(invoice.id)}`);
@@ -301,10 +311,13 @@ export const UploadPage = () => {
                 relatedDocumentId: rutDoc.id,
                 extracted: consolidatedFields,
                 ...(ceco.trim() ? { ceco: ceco.trim() } : {}),
+                ...(expenseCategory ? { expenseCategory } : {}),
               });
 
               updateDocument(rutDoc.id, { relatedDocumentId: accountDoc.id });
 
+              setDocumentFile(rutDoc.id, rutFile);
+              setDocumentFile(accountDoc.id, accountFile);
               addExpenseToLegalization(draft.id, rutDoc.id);
               addExpenseToLegalization(draft.id, accountDoc.id);
 
@@ -361,36 +374,54 @@ export const UploadPage = () => {
               </Typography>
             </header>
 
-            {flow === "invoice" ? (
-              <div className="space-y-5 rounded-2xl border border-secondary-400 bg-white p-6 md:p-8">
-                <div className="space-y-2">
-                  <Select
-                    showSearch
-                    label="Centro de costo (CECO)"
-                    placeholder={
-                      cecosLoading ? "Cargando centros de costo…" : "Busca por código o nombre"
-                    }
-                    options={cecoOptions}
-                    value={ceco}
-                    onChange={(value) => setCeco(Array.isArray(value) ? (value[0] ?? "") : value)}
-                    disabled={cecosLoading || cecoOptions.length === 0}
-                    color={cecosError ? "error" : "default"}
-                    helperText={
-                      cecosError ?? "Selecciona el centro de costo al que se facturará este gasto."
-                    }
-                  />
-                  {cecosError && (
-                    <Button
-                      variant="ghost"
-                      action={loadCecos}
-                      disabled={cecosLoading}
-                      className="min-h-10 px-3"
-                    >
-                      <LuRefreshCw className="mr-2 h-4 w-4" />
-                      Reintentar cargar CECOs
-                    </Button>
-                  )}
-                </div>
+            <div className="space-y-5 rounded-2xl border border-secondary-400 bg-white p-6 md:p-8">
+              <div className="grid gap-5 md:grid-cols-2">
+                {flow === "invoice" && (
+                  <div className="space-y-2">
+                    <Select
+                      showSearch
+                      label="Centro de costo (CECO)"
+                      placeholder={
+                        cecosLoading ? "Cargando centros de costo…" : "Busca por código o nombre"
+                      }
+                      options={cecoOptions}
+                      value={ceco}
+                      onChange={(value) => setCeco(Array.isArray(value) ? (value[0] ?? "") : value)}
+                      disabled={cecosLoading || cecoOptions.length === 0}
+                      color={cecosError ? "error" : "default"}
+                      helperText={
+                        cecosError ??
+                        "Selecciona el centro de costo al que se facturará este gasto."
+                      }
+                    />
+                    {cecosError && (
+                      <Button
+                        variant="ghost"
+                        action={loadCecos}
+                        disabled={cecosLoading}
+                        className="min-h-10 px-3"
+                      >
+                        <LuRefreshCw className="mr-2 h-4 w-4" />
+                        Reintentar cargar CECOs
+                      </Button>
+                    )}
+                  </div>
+                )}
+                <Select
+                  label="Tipo de gasto"
+                  placeholder="Selecciona el tipo de gasto de viaje"
+                  options={EXPENSE_CATEGORY_OPTIONS}
+                  value={expenseCategory}
+                  onChange={(value) =>
+                    setExpenseCategory(
+                      (Array.isArray(value) ? (value[0] ?? "") : value) as ExpenseCategory | "",
+                    )
+                  }
+                  helperText="Define la cuenta contable con la que se contabiliza en SAP."
+                />
+              </div>
+
+              {flow === "invoice" ? (
                 <FileUploader
                   label="Factura"
                   description="PDF, JPG o PNG"
@@ -398,25 +429,25 @@ export const UploadPage = () => {
                   onChange={setInvoiceFile}
                   allowCamera
                 />
-              </div>
-            ) : (
-              <div className="grid gap-5 md:grid-cols-2">
-                <FileUploader
-                  label="RUT"
-                  description="Documento obligatorio en PDF, JPG o PNG"
-                  file={rutFile}
-                  onChange={setRutFile}
-                  allowCamera
-                />
-                <FileUploader
-                  label="Cuenta de cobro"
-                  description="Documento principal en PDF, JPG o PNG"
-                  file={accountFile}
-                  onChange={setAccountFile}
-                  allowCamera
-                />
-              </div>
-            )}
+              ) : (
+                <div className="grid gap-5 md:grid-cols-2">
+                  <FileUploader
+                    label="RUT"
+                    description="Documento obligatorio en PDF, JPG o PNG"
+                    file={rutFile}
+                    onChange={setRutFile}
+                    allowCamera
+                  />
+                  <FileUploader
+                    label="Cuenta de cobro"
+                    description="Documento principal en PDF, JPG o PNG"
+                    file={accountFile}
+                    onChange={setAccountFile}
+                    allowCamera
+                  />
+                </div>
+              )}
+            </div>
 
             <Alert
               variant="outline"

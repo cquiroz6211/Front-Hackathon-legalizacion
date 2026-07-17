@@ -731,20 +731,20 @@ describe("HU-0011 — canSubmitToGestorSap (bloqueos combinados)", () => {
     expect(res.can).toBe(false);
   });
 
-  it("bloquea por exceso pendiente de aprobación del líder", () => {
+  it("no bloquea por exceso (lo decide el Gestor SAP, no hay rol líder)", () => {
     const d = doc(true);
     seedLegalizationRaw({ id: "leg-exceso", expenseIds: [d.id] });
     const res = canSubmitToGestorSap("leg-exceso");
-    expect(res.can).toBe(false);
-    expect(res.blockers).toContain("leader-approval:excess");
+    expect(res.can).toBe(true);
+    expect(res.blockers).toEqual([]);
   });
 
-  it("bloquea por tiempo pendiente de aprobación del líder", () => {
+  it("no bloquea por fuera de tiempo (lo decide el Gestor SAP, no hay rol líder)", () => {
     const d = doc(false, "2024-03-04");
     seedLegalizationRaw({ id: "leg-tiempo", expenseIds: [d.id] });
     const res = canSubmitToGestorSap("leg-tiempo", new Date("2024-03-12T12:00:00"));
-    expect(res.can).toBe(false);
-    expect(res.blockers).toContain("leader-approval:time");
+    expect(res.can).toBe(true);
+    expect(res.blockers).toEqual([]);
   });
 
   it("bloquea por duplicados", () => {
@@ -774,7 +774,7 @@ describe("HU-0011 — canSubmitToGestorSap (bloqueos combinados)", () => {
 });
 
 describe("HU-0011 — submitLegalization respeta aprobación del líder y audita", () => {
-  it("bloquea el envío si falta aprobación del líder por exceso", () => {
+  it("permite el envío con exceso sin aprobación del líder (no hay rol líder)", () => {
     const caro = seedDoc({
       fileName: "caro.pdf",
       extracted: { ...SAMPLE_FIELDS, totalFactura: "600.000,00" },
@@ -782,8 +782,7 @@ describe("HU-0011 — submitLegalization respeta aprobación del líder y audita
     seedLegalizationRaw({ id: "leg-pend", expenseIds: [caro.id] });
 
     const result = submitLegalization("leg-pend");
-    expect(result).toBeUndefined();
-    expect(getLegalization("leg-pend")?.status).toBe("draft");
+    expect(result?.status).toBe("submitted");
   });
 
   it("permite el envío tras la aprobación del líder y registra auditoría", () => {

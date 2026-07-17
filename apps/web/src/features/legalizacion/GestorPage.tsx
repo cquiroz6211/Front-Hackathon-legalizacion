@@ -8,13 +8,14 @@ import {
   LuClock,
   LuFileText,
   LuInbox,
-  LuShieldCheck,
+  LuRefreshCw,
 } from "react-icons/lu";
 
 import { Alert, Button, Chip, Input, Typography, useToast } from "@comfama/comfama-ui-react";
 
 import { authRoleLabel, getSession, signOut } from "@/features/auth";
 
+import { getContabilizacion, postContabilizacion } from "./lib/api";
 import {
   approveLegalization,
   getDocument,
@@ -23,12 +24,18 @@ import {
   getLegalizationExcess,
   getLegalizationTimeStatus,
   getLegalizationTotal,
-  isLeaderApproved,
+  listLegalizations,
   listLegalizationsForGestor,
   parseAmount,
   rejectLegalization,
   subscribe,
+  updateDocument,
 } from "./lib/store";
+import {
+  buildNumDocExterno,
+  buildSapContabilizacionPayload,
+  getSapEligibleDocuments,
+} from "./lib/sap";
 import type { DocumentRecord, Legalization } from "./types/document";
 import { LegalizacionHeader } from "./components/LegalizacionHeader";
 
@@ -47,6 +54,28 @@ function formatDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatDateTime(iso: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("es-CO", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Legalizaciones ya decididas por el Gestor SAP (aprobadas o rechazadas), más recientes primero. */
+function listGestorDecisions(): Legalization[] {
+  return listLegalizations()
+    .filter((l) => l.status === "approved" || l.status === "rejected")
+    .sort((a, b) => {
+      const ta = a.gestorDecision?.at ?? a.createdAt;
+      const tb = b.gestorDecision?.at ?? b.createdAt;
+      return new Date(tb).getTime() - new Date(ta).getTime();
+    });
 }
 
 /**
@@ -71,31 +100,122 @@ const GestorPageInner = () => {
   const navigate = useNavigate();
 
   const [pending, setPending] = useState<Legalization[]>(() => listLegalizationsForGestor());
+  const [decided, setDecided] = useState<Legalization[]>(() => listGestorDecisions());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [historyExpanded, setHistoryExpanded] = useState<Record<string, boolean>>({});
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribe(() => setPending(listLegalizationsForGestor()));
+    const unsubscribe = subscribe(() => {
+      setPending(listLegalizationsForGestor());
+      setDecided(listGestorDecisions());
+    });
     return () => {
       unsubscribe();
     };
   }, []);
 
+  const toggleHistoryExpanded = (id: string) => {
+    setHistoryExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleApprove = (leg: Legalization) => {
-    const updated = approveLegalization(leg.id, gestorId);
-    if (updated?.status === "approved") {
-      toast({
-        type: "success",
-        title: "Legalización aprobada",
-        description: `${leg.period} quedó aprobada.`,
-        showIcon: true,
-        showCloseButton: true,
-      });
+  const handleApprove = async (leg: Legalization) => {
+    setApprovingId(leg.id);
+    try {
+      const eligibleDocs = getSapEligibleDocuments(leg, getDocument);
+      const failed: string[] = [];
+      const numerosDocumento: string[] = [];
+
+      for (const doc of eligibleDocs) {
+        const numDocExterno = buildNumDocExterno(doc);
+        const payload = buildSapContabilizacionPayload(doc);
+        try {
+          const sapRes = await postContabilizacion(payload);
+          let numeroDocumento = sapRes.numeroDocumento ?? null;
+          let error = sapRes.ok ? undefined : (sapRes.error ?? "SAP rechazó la contabilización.");
+          let sapOk = sapRes.ok;
+
+          // El POST solo confirma con req_id + advertencias, sin número de
+          // documento ni resultado final: SAP procesa async, así que hay que
+          // consultarlo con GET para saber si de verdad se contabilizó.
+          if (sapRes.ok && !numeroDocumento) {
+            try {
+              const consulta = await getContabilizacion(numDocExterno);
+              numeroDocumento = consulta.numeroDocumento ?? null;
+              if (numeroDocumento) {
+                error = undefined;
+              } else if (consulta.sapErrores && consulta.sapErrores.length > 0) {
+                sapOk = false;
+                error = consulta.sapErrores.join(" · ");
+              } else {
+                error =
+                  "SAP aceptó la contabilización, pero aún no asigna número de documento. Reintentá la consulta más tarde.";
+              }
+            } catch {
+              error =
+                "SAP aceptó la contabilización, pero no se pudo consultar el número de documento.";
+            }
+          }
+
+          updateDocument(doc.id, {
+            sapContabilizacion: {
+              at: new Date().toISOString(),
+              ok: sapOk,
+              status: sapRes.sapStatus ?? 0,
+              numDocExterno,
+              numeroDocumento,
+              error,
+            },
+          });
+          if (!sapOk) failed.push(doc.fileName);
+          else if (numeroDocumento) numerosDocumento.push(numeroDocumento);
+        } catch (err) {
+          updateDocument(doc.id, {
+            sapContabilizacion: {
+              at: new Date().toISOString(),
+              ok: false,
+              status: 0,
+              numDocExterno,
+              numeroDocumento: null,
+              error: err instanceof Error ? err.message : "Error de red al contabilizar en SAP.",
+            },
+          });
+          failed.push(doc.fileName);
+        }
+      }
+
+      if (failed.length > 0) {
+        toast({
+          type: "error",
+          title: "Error al contabilizar en SAP",
+          description: `No se pudo contabilizar: ${failed.join(", ")}. La legalización sigue pendiente.`,
+          showIcon: true,
+          showCloseButton: true,
+        });
+        return;
+      }
+
+      const updated = approveLegalization(leg.id, gestorId);
+      if (updated?.status === "approved") {
+        toast({
+          type: "success",
+          title: "Legalización aprobada",
+          description:
+            numerosDocumento.length > 0
+              ? `${leg.period} quedó aprobada. N° de documento SAP: ${numerosDocumento.join(", ")}.`
+              : `${leg.period} quedó aprobada y contabilizada en SAP. SAP aún no asignó número de documento; revisá el historial más tarde.`,
+          showIcon: true,
+          showCloseButton: true,
+        });
+      }
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -200,9 +320,10 @@ const GestorPageInner = () => {
                     gestorId={gestorId}
                     isExpanded={!!expanded[leg.id]}
                     isRejecting={rejectingId === leg.id}
+                    isApproving={approvingId === leg.id}
                     rejectReason={rejectReason}
                     onToggle={() => toggleExpanded(leg.id)}
-                    onApprove={() => handleApprove(leg)}
+                    onApprove={() => void handleApprove(leg)}
                     onStartReject={() => startReject(leg.id)}
                     onCancelReject={cancelReject}
                     onReasonChange={setRejectReason}
@@ -212,6 +333,36 @@ const GestorPageInner = () => {
               </ul>
             </section>
           )}
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Typography
+                variant="body2"
+                className="font-bold uppercase tracking-widest text-secondary-600"
+              >
+                Historial de decisiones
+              </Typography>
+              <div className="h-px flex-1 bg-secondary-400" />
+              <span className="text-xs font-semibold text-secondary-600">{decided.length}</span>
+            </div>
+
+            {decided.length === 0 ? (
+              <div className="rounded-2xl border border-secondary-400 bg-white p-6 text-center text-sm text-secondary-600">
+                Todavía no has aprobado ni rechazado ninguna legalización.
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {decided.map((leg) => (
+                  <GestorHistoryRow
+                    key={leg.id}
+                    legalization={leg}
+                    isExpanded={!!historyExpanded[leg.id]}
+                    onToggle={() => toggleHistoryExpanded(leg.id)}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
       </main>
     </div>
@@ -223,6 +374,7 @@ interface GestorRowProps {
   gestorId: string;
   isExpanded: boolean;
   isRejecting: boolean;
+  isApproving: boolean;
   rejectReason: string;
   onToggle: () => void;
   onApprove: () => void;
@@ -236,6 +388,7 @@ const GestorRow = ({
   legalization,
   isExpanded,
   isRejecting,
+  isApproving,
   rejectReason,
   onToggle,
   onApprove,
@@ -249,7 +402,6 @@ const GestorRow = ({
   const diferencia = getLegalizationDiferencia(legalization.id);
   const excess = getLegalizationExcess(legalization.id);
   const timeStatus = getLegalizationTimeStatus(legalization.id);
-  const leaderOk = isLeaderApproved(legalization.id);
   const docs: DocumentRecord[] = [];
   for (const docId of legalization.expenseIds) {
     const doc = getDocument(docId);
@@ -264,9 +416,12 @@ const GestorRow = ({
             <LuFileText className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-secondary-900 truncate">{legalization.period}</p>
+            <p className="text-sm font-semibold text-secondary-900 truncate">
+              {legalization.period}
+            </p>
             <p className="text-xs text-secondary-600">
-              {legalization.expenseIds.length} soporte{legalization.expenseIds.length === 1 ? "" : "s"}
+              {legalization.expenseIds.length} soporte
+              {legalization.expenseIds.length === 1 ? "" : "s"}
               {legalization.submittedAt ? ` · enviado ${formatDate(legalization.submittedAt)}` : ""}
             </p>
           </div>
@@ -298,14 +453,6 @@ const GestorRow = ({
               <span className="inline-flex items-center gap-1">
                 <LuClock className="h-3.5 w-3.5" aria-hidden="true" />
                 Fuera de tiempo
-              </span>
-            </Chip>
-          ) : null}
-          {leaderOk ? (
-            <Chip color="success" hoverable={false}>
-              <span className="inline-flex items-center gap-1">
-                <LuShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                Aprobación líder
               </span>
             </Chip>
           ) : null}
@@ -398,7 +545,9 @@ const GestorRow = ({
                     <div className="flex items-center gap-3">
                       <LuFileText className="h-4 w-4 flex-shrink-0 text-primary" />
                       <div className="min-w-0">
-                        <p className="truncate font-mono text-xs text-secondary-900">{doc.fileName}</p>
+                        <p className="truncate font-mono text-xs text-secondary-900">
+                          {doc.fileName}
+                        </p>
                         <p className="text-xs text-secondary-600">
                           {doc.extracted?.fecha ? formatDate(doc.extracted.fecha) : "Sin fecha"}
                         </p>
@@ -437,14 +586,158 @@ const GestorRow = ({
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <Button variant="outlined" className="min-h-11" action={onStartReject}>
+              <Button
+                variant="outlined"
+                className="min-h-11"
+                action={onStartReject}
+                disabled={isApproving}
+              >
                 Rechazar
               </Button>
-              <Button className="min-h-11" action={onApprove}>
-                Aprobar
+              <Button className="min-h-11" action={onApprove} disabled={isApproving}>
+                {isApproving ? (
+                  <>
+                    <LuRefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Contabilizando en SAP…
+                  </>
+                ) : (
+                  "Aprobar"
+                )}
               </Button>
             </div>
           )}
+        </div>
+      )}
+    </li>
+  );
+};
+
+interface GestorHistoryRowProps {
+  legalization: Legalization;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+/** Fila de historial: decisión terminal del Gestor SAP + número(s) de documento SAP por soporte. */
+const GestorHistoryRow = ({ legalization, isExpanded, onToggle }: GestorHistoryRowProps) => {
+  const total = getLegalizationTotal(legalization.id);
+  const decision = legalization.gestorDecision;
+  const docs: DocumentRecord[] = [];
+  for (const docId of legalization.expenseIds) {
+    const doc = getDocument(docId);
+    if (doc) docs.push(doc);
+  }
+
+  return (
+    <li className="rounded-2xl border border-secondary-400 bg-white">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-[1.4fr_1fr_1fr_auto] sm:items-center sm:p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-secondary-400 bg-primary-50 text-primary">
+            <LuFileText className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-secondary-900 truncate">
+              {legalization.period}
+            </p>
+            <p className="text-xs text-secondary-600">
+              {decision ? `${decision.gestor} · ${formatDateTime(decision.at)}` : "—"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col">
+          <span className="text-xs font-bold uppercase tracking-widest text-secondary-600">
+            Total
+          </span>
+          <span className="mt-1 font-mono text-sm font-semibold text-secondary-900">
+            {formatCurrencyARS(total)}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip color={legalization.status === "approved" ? "success" : "error"} hoverable={false}>
+            {legalization.status === "approved" ? "Aprobado" : "Rechazado"}
+          </Chip>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            isIcon
+            size="sm"
+            aria-label={isExpanded ? "Ocultar detalle" : "Ver detalle"}
+            aria-expanded={isExpanded}
+            action={onToggle}
+          >
+            {isExpanded ? (
+              <LuChevronDown className="h-5 w-5 text-secondary-600" />
+            ) : (
+              <LuChevronRight className="h-5 w-5 text-secondary-600" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="space-y-4 border-t border-secondary-400 p-4 sm:p-5">
+          {legalization.status === "rejected" && decision?.reason ? (
+            <Alert
+              variant="outline"
+              type="error"
+              title="Motivo del rechazo"
+              description={decision.reason}
+              showIcon
+            />
+          ) : null}
+
+          <div className="space-y-3">
+            <Typography
+              variant="body2"
+              className="font-bold uppercase tracking-widest text-secondary-600"
+            >
+              Soportes y contabilización SAP
+            </Typography>
+            {docs.length === 0 ? (
+              <div className="flex items-start gap-2 rounded-xl border border-secondary-400 bg-secondary-100 p-4 text-xs text-secondary-600">
+                <LuCircleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p>Esta legalización no tiene soportes asociados.</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {docs.map((doc) => {
+                  const sap = doc.sapContabilizacion;
+                  return (
+                    <li
+                      key={doc.id}
+                      className="flex flex-col gap-2 rounded-xl border border-secondary-400 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <LuFileText className="h-4 w-4 flex-shrink-0 text-primary" />
+                        <p className="truncate font-mono text-xs text-secondary-900">
+                          {doc.fileName}
+                        </p>
+                      </div>
+                      {sap ? (
+                        sap.numeroDocumento ? (
+                          <Chip color="success" hoverable={false}>
+                            N° SAP: {sap.numeroDocumento}
+                          </Chip>
+                        ) : (
+                          <Chip color="warning" hoverable={false}>
+                            {sap.error ?? "Sin número de documento SAP"}
+                          </Chip>
+                        )
+                      ) : (
+                        <Chip color="warning" hoverable={false}>
+                          No se contabilizó en SAP
+                        </Chip>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </li>
