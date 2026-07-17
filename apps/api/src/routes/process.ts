@@ -24,6 +24,15 @@ processRouter.post("/process", async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, error: 'Falta "fileBase64" en el body.' });
   }
 
+  // Validación de tamaño (Máximo 10 MB)
+  const maxBase64Length = Math.ceil((10 * 1024 * 1024 * 4) / 3);
+  if (body.fileBase64.length > maxBase64Length) {
+    return res.status(413).json({
+      ok: false,
+      error: "El archivo supera el tamaño máximo permitido de 10 MB.",
+    });
+  }
+
   const startedAt = Date.now();
   console.log(`[process] Inicio del flujo completo (${body.fileName ?? "sin nombre"}).`);
 
