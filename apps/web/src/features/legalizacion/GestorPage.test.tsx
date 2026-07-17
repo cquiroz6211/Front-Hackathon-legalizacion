@@ -129,9 +129,10 @@ describe("GestorPage (HU-0011 lado gestor)", () => {
     seedFixtures();
     renderPage();
     expect(screen.getByText("Marzo 2024")).toBeInTheDocument();
-    // El borrador y la aprobada NO aparecen como ítems pendientes.
+    // El borrador no aparece en ningún lado (ni pendientes ni historial).
     expect(screen.queryByText("Abril 2024")).not.toBeInTheDocument();
-    expect(screen.queryByText("Febrero 2024")).not.toBeInTheDocument();
+    // La aprobada no está entre los pendientes, pero sí en el historial de decisiones.
+    expect(screen.getByText("Febrero 2024")).toBeInTheDocument();
     // Muestra el total del ítem pendiente.
     expect(screen.getByText(/100\.000/)).toBeInTheDocument();
     // Muestra la identidad del gestor en sesión (header + ficha de sesión).
@@ -143,15 +144,19 @@ describe("GestorPage (HU-0011 lado gestor)", () => {
     seedFixtures();
     renderPage();
 
-    // Expandir el detalle para exponer las acciones.
-    await user.click(screen.getByRole("button", { name: /ver detalle/i }));
+    // Expandir el detalle para exponer las acciones (el primer "Ver detalle"
+    // es el de la bandeja de pendientes; el historial de decisiones tiene el suyo).
+    await user.click(screen.getAllByRole("button", { name: /ver detalle/i })[0]);
     expect(screen.getByRole("button", { name: /aprobar/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /aprobar/i }));
 
-    // La legalización aprobada sale de la bandeja (estado terminal).
-    expect(screen.queryByText("Marzo 2024")).not.toBeInTheDocument();
+    // La legalización aprobada sale de la bandeja de pendientes (estado
+    // terminal) y pasa al historial de decisiones del gestor, junto a la
+    // "Febrero 2024" ya aprobada de las fixtures (dos chips "Aprobado").
     expect(screen.getByText(/No hay legalizaciones pendientes/i)).toBeInTheDocument();
+    expect(screen.getByText("Marzo 2024")).toBeInTheDocument();
+    expect(screen.getAllByText("Aprobado")).toHaveLength(2);
   });
 
   it("rechazar sin motivo no remueve el ítem (motivo obligatorio)", async () => {
@@ -159,7 +164,7 @@ describe("GestorPage (HU-0011 lado gestor)", () => {
     seedFixtures();
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: /ver detalle/i }));
+    await user.click(screen.getAllByRole("button", { name: /ver detalle/i })[0]);
     await user.click(screen.getByRole("button", { name: /rechazar/i }));
 
     // Confirmar con motivo vacío mantiene el ítem en la bandeja.
@@ -172,15 +177,18 @@ describe("GestorPage (HU-0011 lado gestor)", () => {
     seedFixtures();
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: /ver detalle/i }));
+    await user.click(screen.getAllByRole("button", { name: /ver detalle/i })[0]);
     await user.click(screen.getByRole("button", { name: /rechazar/i }));
 
     const reasonField = screen.getByLabelText(/motivo del rechazo/i);
     await user.type(reasonField, "Falta soporte");
     await user.click(screen.getByRole("button", { name: /confirmar rechazo/i }));
 
-    expect(screen.queryByText("Marzo 2024")).not.toBeInTheDocument();
+    // La legalización rechazada sale de la bandeja de pendientes (estado
+    // terminal) y pasa al historial de decisiones del gestor.
     expect(screen.getByText(/No hay legalizaciones pendientes/i)).toBeInTheDocument();
+    expect(screen.getByText("Marzo 2024")).toBeInTheDocument();
+    expect(screen.getByText("Rechazado")).toBeInTheDocument();
   });
 
   it("sin pendientes muestra el estado vacío", () => {
