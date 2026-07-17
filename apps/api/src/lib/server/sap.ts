@@ -112,28 +112,34 @@ export interface SapConsultaResumen {
   errorMessages: string[];
 }
 
-/** Interpreta la respuesta de `GET /contabilizacion`: número de documento + errores del intento más reciente. */
+/**
+ * Interpreta la respuesta de SAP, ya sea la del `GET` (`{documentos: [...]}`,
+ * histórico de intentos) o la del `POST` (`{req_id, mensajes}`, plana, sin
+ * número de documento todavía). Extrae número de documento + errores en
+ * cualquiera de los dos shapes.
+ */
 export function interpretSapConsulta(data: unknown): SapConsultaResumen {
   const documentos = (data as { documentos?: unknown })?.documentos;
-  if (!Array.isArray(documentos) || documentos.length === 0) {
-    return { numeroDocumento: genericSearch(data), status: null, errorMessages: [] };
+  if (Array.isArray(documentos) && documentos.length > 0) {
+    const intentos = documentos as SapConsultaIntento[];
+    const latest = intentos[0];
+    const ok = intentos.find((d) => d.status === "OK" && d.num_doc);
+    const errorMessages = (latest.mensajes ?? [])
+      .filter((m) => m.tipo === "E" && m.texto)
+      .map((m) => m.texto as string);
+    return {
+      numeroDocumento: ok?.num_doc ?? null,
+      status: latest.status ?? null,
+      errorMessages,
+    };
   }
-  const intentos = documentos as SapConsultaIntento[];
-  const latest = intentos[0];
-  const ok = intentos.find((d) => d.status === "OK" && d.num_doc);
-  const errorMessages = (latest.mensajes ?? [])
-    .filter((m) => m.tipo === "E" && m.texto)
-    .map((m) => m.texto as string);
-  return {
-    numeroDocumento: ok?.num_doc ?? null,
-    status: latest.status ?? null,
-    errorMessages,
-  };
-}
 
-/** Compatibilidad: solo el número de documento (usa `interpretSapConsulta` para más detalle). */
-export function extractNumeroDocumento(data: unknown): string | null {
-  return interpretSapConsulta(data).numeroDocumento;
+  // Shape del POST: mensajes al nivel raíz, sin `documentos`.
+  const mensajesRaiz = (data as { mensajes?: { tipo?: string; texto?: string }[] })?.mensajes;
+  const errorMessages = Array.isArray(mensajesRaiz)
+    ? mensajesRaiz.filter((m) => m.tipo === "E" && m.texto).map((m) => m.texto as string)
+    : [];
+  return { numeroDocumento: genericSearch(data), status: null, errorMessages };
 }
 
 /** Contabiliza (POST). `payload` es el documento SAP completo (pass-through). */

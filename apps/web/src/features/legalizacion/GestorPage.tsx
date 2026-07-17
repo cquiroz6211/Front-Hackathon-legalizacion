@@ -138,29 +138,51 @@ const GestorPageInner = () => {
         try {
           const sapRes = await postContabilizacion(payload);
           let numeroDocumento = sapRes.numeroDocumento ?? null;
-          let error = sapRes.ok ? undefined : (sapRes.error ?? "SAP rechazó la contabilización.");
           let sapOk = sapRes.ok;
+          let error: string | undefined;
+
+          // Duplicado con estatus OK: SAP ya contabilizó este num_doc_externo
+          // en un intento anterior (el nuestro pudo haber revisado antes de
+          // que SAP terminara de procesar, de forma asíncrona). No es un
+          // error real: solo hay que ir a buscar el número ya asignado.
+          const yaContabilizado =
+            !sapRes.ok &&
+            (sapRes.sapErrores ?? []).some((m) => /duplicad/i.test(m) && /\bOK\b/i.test(m));
 
           // El POST solo confirma con req_id + advertencias, sin número de
           // documento ni resultado final: SAP procesa async, así que hay que
-          // consultarlo con GET para saber si de verdad se contabilizó.
-          if (sapRes.ok && !numeroDocumento) {
-            try {
-              const consulta = await getContabilizacion(numDocExterno);
-              numeroDocumento = consulta.numeroDocumento ?? null;
-              if (numeroDocumento) {
-                error = undefined;
-              } else if (consulta.sapErrores && consulta.sapErrores.length > 0) {
-                sapOk = false;
-                error = consulta.sapErrores.join(" · ");
-              } else {
+          // consultarlo con GET (con reintentos, dando tiempo a que SAP
+          // termine de procesar) para saber si de verdad se contabilizó.
+          if ((sapRes.ok || yaContabilizado) && !numeroDocumento) {
+            sapOk = true;
+            const maxAttempts = 4;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              if (attempt > 1) await new Promise((r) => setTimeout(r, 1500));
+              try {
+                const consulta = await getContabilizacion(numDocExterno);
+                if (consulta.numeroDocumento) {
+                  numeroDocumento = consulta.numeroDocumento;
+                  error = undefined;
+                  break;
+                }
+                if (consulta.sapErrores && consulta.sapErrores.length > 0) {
+                  sapOk = false;
+                  error = consulta.sapErrores.join(" · ");
+                  break;
+                }
                 error =
                   "SAP aceptó la contabilización, pero aún no asigna número de documento. Reintentá la consulta más tarde.";
+              } catch {
+                error =
+                  "SAP aceptó la contabilización, pero no se pudo consultar el número de documento.";
               }
-            } catch {
-              error =
-                "SAP aceptó la contabilización, pero no se pudo consultar el número de documento.";
             }
+          } else if (!sapRes.ok && !yaContabilizado) {
+            sapOk = false;
+            error =
+              sapRes.sapErrores && sapRes.sapErrores.length > 0
+                ? sapRes.sapErrores.join(" · ")
+                : (sapRes.error ?? "SAP rechazó la contabilización.");
           }
 
           updateDocument(doc.id, {
